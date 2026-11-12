@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix Remix Railway Ticket Booking \u0026 Management System",
+  "description": "Complete Railway Ticket Booking and Management System frontend built with pure HTML5, CSS3, and Vanilla JavaScript with interactive user and admin dashboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

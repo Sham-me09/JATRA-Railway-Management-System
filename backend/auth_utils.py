@@ -1,0 +1,233 @@
+﻿"""
+auth_utils.py â€” JWT Authentication Helpers and Role-Based Decorators
+
+JATRA Railway Management System
+"""
+
+import os
+import jwt
+from datetime import datetime, timedelta, timezone
+from functools import wraps
+from flask import request, jsonify
+from dotenv import load_dotenv
+
+load_dotenv()
+
+JWT_SECRET = os.getenv("JWT_SECRET", "jatra-railway-jwt-secret-change-this")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_HOURS = 8
+
+# ============================================================
+# Role constants matching Oracle APP_USER.user_type CHECK values
+# ============================================================
+
+ROLE_PASSENGER = "PASSENGER"
+ROLE_ADMIN = "ADMIN"
+ROLE_TRAIN_MANAGER = "TRAIN_MANAGER"
+ROLE_STATION_MASTER = "STATION_MASTER"
+ROLE_TICKET_MANAGER = "TICKET_MANAGER"
+ROLE_EMPLOYEE = "EMPLOYEE"
+
+# Frontend role string â†’ Oracle user_type mapping
+FRONTEND_TO_DB_ROLE = {
+    "user": ROLE_PASSENGER,
+    "passenger": ROLE_PASSENGER,
+    "admin": ROLE_ADMIN,
+    "train_manager": ROLE_TRAIN_MANAGER,
+    "station_master": ROLE_STATION_MASTER,
+    "ticket_manager": ROLE_TICKET_MANAGER,
+}
+
+# Oracle user_type â†’ frontend role string mapping
+DB_TO_FRONTEND_ROLE = {
+    ROLE_PASSENGER: "user",
+    ROLE_ADMIN: "admin",
+    ROLE_TRAIN_MANAGER: "train_manager",
+    ROLE_STATION_MASTER: "station_master",
+    ROLE_TICKET_MANAGER: "ticket_manager",
+    ROLE_EMPLOYEE: "employee",
+}
+
+
+# ============================================================
+# Password helpers
+# ============================================================
+
+def hash_password(plain_password: str) -> str:
+    """
+    Store the password as plain text.
+
+    This is intentionally simple for the JATRA academic/student project.
+    For a production system, passwords should always be hashed.
+    """
+    return plain_password
+
+
+def check_password(plain_password: str, stored_password: str) -> bool:
+    """
+    Compare the entered password directly with the password
+    stored in the Oracle APP_USER table.
+    """
+    return plain_password == stored_password
+
+
+# ============================================================
+# JWT token helpers
+# ============================================================
+
+def generate_token(user_id: str, role: str, name: str) -> str:
+    """
+    Generate a signed JWT token with user identity and role.
+    Expires after JWT_EXPIRY_HOURS hours.
+    """
+    payload = {
+        "user_id": user_id,
+        "role": role,
+        "name": name,
+        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRY_HOURS),
+    }
+
+    return jwt.encode(
+        payload,
+        JWT_SECRET,
+        algorithm=JWT_ALGORITHM
+    )
+
+
+def verify_token(token: str) -> dict | None:
+    """
+    Decode and verify a JWT token.
+    Returns the decoded payload dict, or None if invalid/expired.
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SECRET,
+            algorithms=[JWT_ALGORITHM]
+        )
+        return payload
+
+    except jwt.ExpiredSignatureError:
+        return None
+
+    except jwt.InvalidTokenError:
+        return None
+
+
+def get_token_from_request() -> str | None:
+    """Extract the Bearer token from the Authorization header."""
+
+    auth_header = request.headers.get("Authorization", "")
+
+    if auth_header.startswith("Bearer "):
+        return auth_header[7:]
+
+    return None
+
+
+def get_current_user() -> dict | None:
+    """
+    Decode the current request's JWT token.
+    Returns payload dict with user_id, role, name â€” or None.
+    """
+
+    token = get_token_from_request()
+
+    if not token:
+        return None
+
+    return verify_token(token)
+
+
+# ============================================================
+# Authorization decorators
+# ============================================================
+
+def require_auth(f):
+    """
+    Decorator: require a valid JWT token.
+
+    Injects `current_user` as the first argument
+    to the wrapped function.
+    """
+
+    @wraps(f)
+    def decorated(*args, **kwargs):
+
+        # Allow CORS preflight requests to pass through.
+        # Authentication is still required for the actual API request.
+        if request.method == "OPTIONS":
+            return f(
+                current_user=None,
+                *args,
+                **kwargs
+            )
+
+        user = get_current_user()
+
+        if not user:
+            return jsonify({
+                "error": "Authentication required. Please log in.",
+                "code": "UNAUTHORIZED"
+            }), 401
+
+        return f(
+            current_user=user,
+            *args,
+            **kwargs
+        )
+
+    return decorated
+
+
+def require_role(*allowed_roles):
+    """
+    Decorator factory: require a valid JWT token AND
+    one of the specified roles.
+
+    Example:
+
+        @require_role(ROLE_ADMIN)
+        def admin_endpoint(current_user):
+            ...
+
+    Multiple roles:
+
+        @require_role(ROLE_ADMIN, ROLE_TRAIN_MANAGER)
+        def manager_or_admin_endpoint(current_user):
+            ...
+    """
+
+    def decorator(f):
+
+        @wraps(f)
+        def decorated(*args, **kwargs):
+
+            user = get_current_user()
+
+            if not user:
+                return jsonify({
+                    "error": "Authentication required. Please log in.",
+                    "code": "UNAUTHORIZED"
+                }), 401
+
+            if user.get("role") not in allowed_roles:
+                return jsonify({
+                    "error": (
+                        "Access denied. Required role: "
+                        + ", ".join(allowed_roles)
+                        + "."
+                    ),
+                    "code": "FORBIDDEN"
+                }), 403
+
+            return f(
+                current_user=user,
+                *args,
+                **kwargs
+            )
+
+        return decorated
+
+    return decorator

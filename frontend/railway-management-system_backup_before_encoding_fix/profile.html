@@ -1,0 +1,272 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Profile - JATRA: RAILWAY MANAGEMENT SYSTEM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              900: '#0f172a',
+              800: '#1e293b',
+              700: '#334155'
+            },
+            sky: {
+              bright: '#38bdf8',
+              light: '#e0f2fe',
+              subtle: '#f0f9ff'
+            },
+            accent: {
+              blue: '#0284c7',
+              hover: '#0369a1'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container navbar-container">
+      <a href="index.html" class="brand-logo" id="brandLogoLink">
+        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5-1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5-1.5zm1.5-5H6V8h12v4z"/></svg>
+        <span>JATRA: RAILWAY MANAGEMENT SYSTEM</span>
+      </a>
+
+      <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Toggle Navigation">â˜°</button>
+
+      <ul class="nav-menu" id="navMenu">
+        <li><a href="index.html" class="nav-link">Home</a></li>
+        <li><a href="search-train.html" class="nav-link">Search Trains</a></li>
+        <li><a href="my-tickets.html" class="nav-link">My Tickets</a></li>
+        <li><a href="complaint.html" class="nav-link">Complaints</a></li>
+      </ul>
+
+      <div class="nav-actions" id="navActions"></div>
+    </div>
+  </nav>
+
+  <div class="dashboard-container">
+    <!-- Sidebar rendered dynamically by main.js based on role -->
+    <aside class="sidebar">
+      <!-- Injected by renderRoleSidebar() in main.js -->
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="dashboard-main p-4 sm:p-8 bg-slate-900/90 text-slate-100 flex-1">
+      <div class="dashboard-header mb-6">
+        <div class="dashboard-title">
+          <h1 class="text-2xl sm:text-3xl font-extrabold text-white">My Account Profile</h1>
+          <p class="text-slate-400 text-sm">View and update your personal information and portal settings</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Left: Avatar & Summary Card -->
+        <div class="lg:col-span-1 bg-slate-800/90 border border-slate-700/80 rounded-2xl p-6 shadow-xl flex flex-col items-center text-center">
+          <div class="relative mb-4">
+            <div id="profAvatarDisplay" class="w-24 h-24 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 border-4 border-sky-400/30 flex items-center justify-center text-4xl text-white font-black shadow-lg">
+              ðŸ‘¤
+            </div>
+            <span id="profRoleBadge" class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-0.5 text-xs font-bold rounded-full bg-sky-500 text-white shadow">
+              Passenger
+            </span>
+          </div>
+
+          <h2 id="profSummaryName" class="text-xl font-bold text-white mb-0.5">User Name</h2>
+          <p id="profSummaryEmail" class="text-xs text-sky-400 font-mono mb-3">user@railway.com</p>
+
+          <div class="w-full pt-4 border-t border-slate-700/80 space-y-2 text-xs text-left">
+            <div class="flex justify-between py-1">
+              <span class="text-slate-400">User ID:</span>
+              <span id="profSummaryId" class="font-bold font-mono text-white">USR-1001</span>
+            </div>
+            <div class="flex justify-between py-1">
+              <span class="text-slate-400">Account Role:</span>
+              <span id="profSummaryRole" class="font-bold text-sky-300">Passenger</span>
+            </div>
+            <div class="flex justify-between py-1">
+              <span class="text-slate-400">Mobile Phone:</span>
+              <span id="profSummaryPhone" class="font-bold text-white">01711223344</span>
+            </div>
+            <div id="profStaffStationRow" class="flex justify-between py-1 hidden">
+              <span class="text-slate-400">Assigned Station:</span>
+              <span id="profSummaryStation" class="font-bold text-emerald-400">Dhaka (Kamalapur)</span>
+            </div>
+            <div id="profStaffTrainRow" class="flex justify-between py-1 hidden">
+              <span class="text-slate-400">Assigned Train:</span>
+              <span id="profSummaryTrain" class="font-bold text-cyan-300">Sonar Bangla Express</span>
+            </div>
+            <div id="profStaffDutyRow" class="flex justify-between py-1 hidden">
+              <span class="text-slate-400">Duty Designation:</span>
+              <span id="profSummaryDesignation" class="font-bold text-sky-300">Staff</span>
+            </div>
+            
+            <!-- Emergency Contact Summary (Staff & Admins Only - All except Passenger) -->
+            <div id="profEmergencyContactSummary" class="w-full pt-3 mt-3 border-t border-slate-700/80 space-y-1 text-xs text-left hidden">
+              <div class="text-[11px] font-bold text-sky-400 uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+                <span>ðŸš¨</span> Emergency Contact
+              </div>
+              <div class="flex justify-between py-0.5">
+                <span class="text-slate-400">Contact Person:</span>
+                <span id="profSummaryEmgName" class="font-bold text-white">Not Set</span>
+              </div>
+              <div class="flex justify-between py-0.5">
+                <span class="text-slate-400">Relationship:</span>
+                <span id="profSummaryEmgRelation" class="font-bold text-sky-300">Not Set</span>
+              </div>
+              <div class="flex justify-between py-0.5">
+                <span class="text-slate-400">Emergency Phone:</span>
+                <span id="profSummaryEmgPhone" class="font-bold font-mono text-emerald-400">Not Set</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Edit Profile & Password Forms -->
+        <div class="lg:col-span-2 space-y-6">
+          
+          <!-- Personal Information Form -->
+          <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-6 shadow-xl">
+            <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <span>ðŸ‘¤</span> Personal Information
+            </h3>
+
+            <form id="profileInfoForm" class="space-y-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-xs font-bold text-slate-300 mb-1">Full Name</label>
+                  <input type="text" id="profInputName" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none" required>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-bold text-slate-400 mb-1">Email Address (Read-Only)</label>
+                  <input type="email" id="profInputEmail" class="w-full px-3.5 py-2.5 bg-slate-900/50 border border-slate-800 rounded-xl text-slate-400 text-sm font-mono cursor-not-allowed" readonly>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-bold text-slate-300 mb-1">Phone Number</label>
+                  <input type="tel" id="profInputPhone" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none" required>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-bold text-slate-300 mb-1">National ID (NID)</label>
+                  <input type="text" id="profInputNid" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none" placeholder="199512345678">
+                </div>
+
+                <div>
+                  <label class="block text-xs font-bold text-slate-300 mb-1">Date of Birth</label>
+                  <input type="date" id="profInputDob" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                </div>
+
+                <div>
+                  <label class="block text-xs font-bold text-slate-300 mb-1">Gender</label>
+                  <select id="profInputGender" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1">Address</label>
+                <textarea id="profInputAddress" rows="2" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none" placeholder="Your residential address..."></textarea>
+              </div>
+
+              <!-- Emergency Contact Section (Staff & Operations Roles - All except Passenger) -->
+              <div id="profEmergencyContactSection" class="pt-4 mt-4 border-t border-slate-700/80 hidden">
+                <div class="flex items-center gap-2 mb-3">
+                  <span class="text-base">ðŸš¨</span>
+                  <div>
+                    <h4 class="text-sm font-bold text-white">Emergency Contact Information</h4>
+                    <p class="text-[11px] text-slate-400">Emergency contact record for official railway duty safety & operational coordination</p>
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label class="block text-xs font-bold text-slate-300 mb-1">Contact Person Name</label>
+                    <input type="text" id="profInputEmgName" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none" placeholder="e.g. Fatima Begum">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-slate-300 mb-1">Relationship</label>
+                    <select id="profInputEmgRelation" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                      <option value="Spouse">Spouse</option>
+                      <option value="Parent">Parent</option>
+                      <option value="Sibling">Sibling</option>
+                      <option value="Child">Child</option>
+                      <option value="Relative">Relative</option>
+                      <option value="Guardian">Guardian</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-slate-300 mb-1">Emergency Phone Number</label>
+                    <input type="tel" id="profInputEmgPhone" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none" placeholder="017XXXXXXXX">
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex justify-end pt-2">
+                <button type="submit" class="py-2.5 px-6 bg-sky-600 hover:bg-sky-500 text-white font-bold text-sm rounded-xl shadow-lg transition-all cursor-pointer">
+                  Save Profile Changes
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Security & Password Change Form -->
+          <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-6 shadow-xl">
+            <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <span>🔒</span> Security & Password
+            </h3>
+
+            <form id="profilePasswordForm" class="space-y-4">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label class="block text-xs font-bold text-slate-300 mb-1">Current Password</label>
+                  <input type="password" id="profCurrPass" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none" required>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-bold text-slate-300 mb-1">New Password</label>
+                  <input type="password" id="profNewPass" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none" required>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-bold text-slate-300 mb-1">Confirm New Password</label>
+                  <input type="password" id="profConfirmPass" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none" required>
+                </div>
+              </div>
+
+              <div class="flex justify-end pt-2">
+                <button type="submit" class="py-2.5 px-6 bg-amber-600 hover:bg-amber-500 text-white font-bold text-sm rounded-xl shadow-lg transition-all cursor-pointer">
+                  Update Password
+                </button>
+              </div>
+            </form>
+          </div>
+
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="js/main.js"></script>
+  <script src="js/dashboard.js"></script>    <script src="js/dashboard_db.js"></script>
+</body>
+</html>
+
+

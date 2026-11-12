@@ -1,0 +1,784 @@
+
+console.log("dashboard_db.js loaded successfully");
+
+var DATABASE_CONFIG = {
+    "manage-trains.html": {
+        get: "/api/trains",
+        add: "/api/admin/trains",
+        update: "/api/admin/trains",
+        delete: "/api/admin/trains"
+    },
+
+    "manage-coaches.html": {
+        get: "/api/coaches",
+        add: "/api/admin/coaches",
+        update: "/api/admin/coaches",
+        delete: "/api/admin/coaches"
+    },
+
+    "manage-seats.html": {
+        get: "/api/seats",
+        add: "/api/admin/seats",
+        update: "/api/admin/seats",
+        delete: "/api/admin/seats"
+    },
+
+    "manage-stations.html": {
+        get: "/api/stations",
+        add: "/api/admin/stations",
+        update: "/api/admin/stations",
+        delete: "/api/admin/stations"
+    },
+
+    "manage-platforms.html": {
+        get: "/api/platforms",
+        add: "/api/admin/platforms",
+        update: "/api/admin/platforms",
+        delete: "/api/admin/platforms"
+    },
+
+    "manage-routes.html": {
+        get: "/api/routes",
+        add: "/api/admin/routes",
+        update: "/api/admin/routes",
+        delete: "/api/admin/routes"
+    },
+
+    "manage-fares.html": {
+        get: "/api/fares",
+        add: "/api/admin/fares",
+        update: "/api/admin/fares",
+        delete: "/api/admin/fares"
+    },
+
+    "manage-employees.html": {
+        get: "/api/employees",
+        add: "/api/admin/employees",
+        update: "/api/admin/employees",
+        delete: "/api/admin/employees"
+    },
+
+    "manage-maintenance.html": {
+        get: "/api/maintenance",
+        add: "/api/admin/maintenance",
+        update: "/api/admin/maintenance",
+        delete: "/api/admin/maintenance"
+    }
+,
+
+    "manage-schedules.html": {
+        get: "/api/admin/schedules",
+        add: "/api/admin/schedules",
+        update: "/api/admin/schedules",
+        delete: "/api/admin/schedules"
+    }
+};
+
+async function apiRequest(url, options) {
+
+    options = options || {};
+
+    var response = await fetch(API_BASE + url, {
+        ...options,
+        headers: {
+            "Content-Type": "application/json",
+            ...(options.headers || {})
+        }
+    });
+
+    var result = {};
+
+    try {
+        result = await response.json();
+    } catch (error) {
+        result = {};
+    }
+
+    if (!response.ok) {
+
+        var message =
+            result.error ||
+            result.message ||
+            "Database request failed (" + response.status + ")";
+
+        throw new Error(message);
+    }
+
+    return result;
+}
+
+
+/* =========================
+   TRAIN
+   ========================= */
+
+function convertTrainData(data, id) {
+
+    return {
+        train_id: id || data.id,
+        train_name: data.name,
+        train_category: data.type,
+        travel_duration: data.travelDuration,
+        off_day: data.offDay,
+        operational_status: data.status
+    };
+}
+
+
+/* =========================
+   COACH
+   ========================= */
+
+function convertCoachData(data, id) {
+
+    return {
+        coach_id: id || data.id,
+        train_id: data.trainId,
+        coach_name: data.name,
+        coach_type: data.type,
+        capacity: data.capacity,
+        status: data.status
+    };
+}
+
+
+/* =========================
+   SEAT
+   ========================= */
+
+function convertSeatData(data, id) {
+
+    return {
+        seat_id: id || data.id,
+        coach_id: data.coachId,
+        seat_number: data.seatNumber,
+        seat_status: data.status
+    };
+}
+
+
+/* =========================
+   STATION
+   ========================= */
+
+function convertStationData(data, id) {
+
+    return {
+        station_id: id || data.id,
+        station_name: data.name,
+        station_code: data.code,
+        city: data.city,
+        total_platform_number: data.platforms || data.totalPlatforms,
+        status: data.status
+    };
+}
+
+
+/* =========================
+   PLATFORM
+   ========================= */
+
+async function convertPlatformData(data, id) {
+
+    var stationId = data.stationId;
+
+    // Add form sends station name instead of station ID
+    if (!stationId && data.station) {
+
+        var stationResult = await apiRequest("/api/stations");
+
+        var stations = stationResult.stations || [];
+
+        var station = stations.find(function(s) {
+            return String(s.station_name).trim().toLowerCase() ===
+                   String(data.station).trim().toLowerCase();
+        });
+
+        if (!station) {
+            throw new Error(
+                "Station not found: " + data.station
+            );
+        }
+
+        stationId = station.station_id;
+    }
+
+    return {
+        platform_id: id || data.id,
+        station_id: stationId,
+        platform_no: data.platformNo || data.platformNumber,
+        gauge_type: data.gaugeType || data.type,
+        status: data.status
+    };
+}
+
+
+/* =========================
+   ROUTE
+   ========================= */
+
+function convertRouteData(data, id) {
+
+    return {
+        route_id: id || data.id,
+        route_name: data.routeName || data.name,
+        source_station: data.source,
+        destination: data.destination,
+        distance: data.distanceKm || data.distance,
+        status: data.status
+    };
+}
+
+
+/* =========================
+   FARE
+   ========================= */
+
+function convertFareData(data, id) {
+
+    return {
+        fare_id: id || data.id,
+        route_id: data.routeId,
+        rate_per_km: data.ratePerKm
+    };
+}
+
+
+/* =========================
+   MAINTENANCE
+   ========================= */
+
+function convertEmployeeData(data, id) {
+    return {
+        user_id: id || data.id,
+        name: data.name,
+        role: data.designation,
+        station: data.station,
+        phone: data.phone,
+        emergencyContactName: data.emergencyContactName,
+        emergencyContactRelation: data.emergencyContactRelation,
+        emergencyContactPhone: data.emergencyContactPhone,
+        status: data.status
+    };
+}
+
+function convertMaintenanceData(data, id) {
+
+    return {
+        maintenance_id: id || data.id,
+        train_id: data.trainId,
+        category: data.category,
+        target: data.target,
+        severity: data.severity,
+        status: data.status,
+        logged_date: data.loggedDate,
+        reported_by: data.reportedBy
+    };
+}
+
+
+/* =========================
+   PREPARE DATA
+   ========================= */
+
+async function prepareDatabaseData(pagePath, data, id) {
+
+    switch (pagePath) {
+
+        case "manage-trains.html":
+            return convertTrainData(data, id);
+
+        case "manage-coaches.html":
+            return convertCoachData(data, id);
+
+        case "manage-seats.html":
+            return convertSeatData(data, id);
+
+        case "manage-stations.html":
+            return convertStationData(data, id);
+
+        case "manage-platforms.html":
+            return convertPlatformData(data, id);
+
+        case "manage-routes.html":
+            return convertRouteData(data, id);
+
+        case "manage-fares.html":
+            return convertFareData(data, id);
+
+        case "manage-employees.html":
+    return convertEmployeeData(data, id);
+
+case "manage-employees.html":
+    return {
+        id: row.user_id || row.employee_id,
+        name: row.name,
+        designation: ({
+            "ADMIN": "Admin",
+            "STATION_MASTER": "Station Master",
+            "TICKET_MANAGER": "Ticket Manager",
+            "TRAIN_MANAGER": "Train Manager",
+            "LOCOMOTIVE_PILOT": "Locomotive Pilot",
+            "TICKET_EXAMINER": "Ticket Examiner (TTE)"
+        }[row.role] || row.role || "N/A"),
+        station: row.station,
+        phone: row.phone,
+        emergencyContactName: row.emergency_contact_name,
+        emergencyContactRelation: row.emergency_contact_relation,
+        emergencyContactPhone: row.emergency_contact_phone,
+        status: row.status
+    };
+
+case "manage-maintenance.html":
+            return convertMaintenanceData(data, id);
+
+        default:
+            return data;
+    }
+}
+
+
+/* =========================
+   NORMALIZE DATA
+   ========================= */
+
+function normalizeDatabaseData(pagePath, row) {
+
+    switch (pagePath) {
+
+        case "manage-trains.html":
+
+            return {
+                id: row.train_id,
+                name: row.train_name,
+                type: row.train_category,
+                travelDuration: row.travel_duration,
+                offDay: row.off_day,
+                status: row.operational_status
+            };
+
+
+        case "manage-coaches.html":
+
+            return {
+                id: row.coach_id,
+                trainId: row.train_id,
+                name: row.coach_name,
+                type: row.coach_type,
+                capacity: row.capacity,
+                status: row.status
+            };
+
+
+        case "manage-seats.html":
+
+            return {
+                id: row.seat_id,
+                coachId: row.coach_id,
+                seatNumber: row.seat_number,
+                status: row.seat_status
+            };
+
+
+        case "manage-stations.html":
+
+            return {
+                id: row.station_id,
+                name: row.station_name,
+                code: row.station_code,
+                city: row.city,
+                platforms: row.total_platform_number,
+                totalPlatforms: row.total_platform_number,
+                totalPlatforms: row.total_platform_number,
+                status: row.status
+            };
+
+
+        case "manage-platforms.html":
+
+            return {
+                id: row.platform_id || row.id,
+                station: row.station_name || row.station,
+                stationId: row.station_id || row.stationId,
+                platformNumber: row.platform_no || row.platformNo,
+                platformNo: row.platform_no || row.platformNo,
+                type: row.gauge_type || row.gaugeType,
+                gaugeType: row.gauge_type || row.gaugeType,
+                status: row.status
+            };
+
+
+        case "manage-routes.html":
+
+            return {
+                id: row.route_id || row.id,
+                routeName: row.route_name || row.name,
+                name: row.route_name || row.name,
+                source: row.source_station || row.source,
+                destination: row.destination,
+                distanceKm: row.distance,
+                distance: row.distance,
+                status: row.status
+            };
+
+
+        case "manage-fares.html":
+
+            return {
+                id: row.fare_id,
+                routeId: row.route_id,
+                ratePerKm: row.rate_per_km
+            };
+
+
+        case "manage-maintenance.html":
+
+            return {
+                id: row.maintenance_id,
+                trainId: row.train_id,
+                category: row.category,
+                target: row.target,
+                severity: row.severity,
+                status: row.status,
+                loggedDate: row.logged_date,
+                reportedBy: row.reported_by
+            };
+
+
+        default:
+            return row;
+    }
+}
+
+
+/* =========================
+   GET
+   ========================= */
+
+async function databaseGet(pagePath) {
+
+    var config = DATABASE_CONFIG[pagePath];
+
+    if (!config || !config.get) {
+        throw new Error(
+            "No GET API configured for " + pagePath
+        );
+    }
+
+    var result = await apiRequest(config.get);
+
+    var rows = [];
+
+    if (Array.isArray(result)) {
+        rows = result;
+    }
+
+    else if (Array.isArray(result.data)) {
+        rows = result.data;
+    }
+
+    else if (Array.isArray(result.trains)) {
+        rows = result.trains;
+    }
+
+    else if (Array.isArray(result.coaches)) {
+        rows = result.coaches;
+    }
+
+    else if (Array.isArray(result.seats)) {
+        rows = result.seats;
+    }
+
+    else if (Array.isArray(result.stations)) {
+        rows = result.stations;
+    }
+
+    else if (Array.isArray(result.platforms)) {
+        rows = result.platforms;
+    }
+
+    else if (Array.isArray(result.routes)) {
+        rows = result.routes;
+    }
+
+    else if (Array.isArray(result.fares)) {
+        rows = result.fares;
+    }
+
+    else if (Array.isArray(result.maintenance)) {
+        rows = result.maintenance;
+    }
+
+    else if (Array.isArray(result.employees)) {
+        rows = result.employees;
+    }
+
+    return rows.map(function(row) {
+
+        return normalizeDatabaseData(
+            pagePath,
+            row
+        );
+
+    });
+}
+
+
+/* =========================
+   ADD
+   ========================= */
+
+async function databaseAdd(pagePath, data) {
+
+    var config = DATABASE_CONFIG[pagePath];
+
+    if (!config || !config.add) {
+        throw new Error(
+            "No ADD API configured for " + pagePath
+        );
+    }
+
+    var databaseData =
+        await prepareDatabaseData(
+            pagePath,
+            data,
+            data.id
+        );
+
+    console.log(
+        "DATABASE ADD:",
+        databaseData
+    );
+
+    return await apiRequest(
+        config.add,
+        {
+            method: "POST",
+            body: JSON.stringify(databaseData)
+        }
+    );
+}
+
+
+/* =========================
+   UPDATE
+   ========================= */
+
+async function databaseUpdate(
+    pagePath,
+    id,
+    data
+) {
+
+    var config = DATABASE_CONFIG[pagePath];
+
+    if (!config || !config.update) {
+        throw new Error(
+            "No UPDATE API configured for " + pagePath
+        );
+    }
+
+    var databaseData =
+        await prepareDatabaseData(
+            pagePath,
+            data,
+            id
+        );
+
+    console.log(
+        "DATABASE UPDATE:",
+        databaseData
+    );
+
+    return await apiRequest(
+        config.update + "/" +
+        encodeURIComponent(id),
+        {
+            method: "PUT",
+            body: JSON.stringify(databaseData)
+        }
+    );
+}
+
+
+/* =========================
+   DELETE
+   ========================= */
+
+async function databaseDelete(
+    pagePath,
+    id
+) {
+
+    var config = DATABASE_CONFIG[pagePath];
+
+    if (!config || !config.delete) {
+        throw new Error(
+            "No DELETE API configured for " + pagePath
+        );
+    }
+
+    console.log(
+        "DATABASE DELETE:",
+        pagePath,
+        id
+    );
+
+    return await apiRequest(
+        config.delete + "/" +
+        encodeURIComponent(id),
+        {
+            method: "DELETE"
+        }
+    );
+}
+
+
+/* =========================
+   REFRESH PAGE
+   ========================= */
+
+async function refreshDatabasePage(pagePath) {
+
+    var rows =
+        await databaseGet(pagePath);
+
+    var storageMap = {
+
+        "manage-trains.html":
+            "trains",
+
+        "manage-coaches.html":
+            "coaches",
+
+        "manage-seats.html":
+            "seats",
+
+        "manage-stations.html":
+            "stations",
+
+        "manage-platforms.html":
+            "platforms",
+
+        "manage-routes.html":
+            "routes",
+
+        "manage-fares.html":
+            "fares",
+
+        "manage-maintenance.html": "maintenance",
+
+        "manage-employees.html":
+            "employees"
+    };
+
+    var key =
+        storageMap[pagePath];
+
+    if (key) {
+
+        localStorage.setItem(
+            key,
+            JSON.stringify(rows)
+        );
+    }
+
+    console.log(
+        "Loaded " +
+        rows.length +
+        " records from Oracle for " +
+        pagePath
+    );
+
+    return rows;
+}
+
+
+/* =========================
+   INITIALIZE CRUD PAGE
+   ========================= */
+
+async function initDatabaseCrudPage(pagePath) {
+
+    console.log(
+        "Loading " +
+        pagePath +
+        " from Oracle..."
+    );
+
+    try {
+
+        await refreshDatabasePage(
+            pagePath
+        );
+
+        if (
+            typeof initAdminCrudTable ===
+            "function"
+        ) {
+
+            initAdminCrudTable(
+                pagePath
+            );
+        }
+
+    } catch (error) {
+
+        console.error(
+            "DATABASE PAGE INITIALIZATION ERROR:",
+            error
+        );
+
+        if (
+            typeof initAdminCrudTable ===
+            "function"
+        ) {
+
+            initAdminCrudTable(
+                pagePath
+            );
+        }
+    }
+}
+
+
+/* =========================
+   GLOBAL FUNCTIONS
+   ========================= */
+
+window.databaseGet =
+    databaseGet;
+
+window.databaseAdd =
+    databaseAdd;
+
+window.databaseUpdate =
+    databaseUpdate;
+
+window.databaseDelete =
+    databaseDelete;
+
+window.refreshDatabasePage =
+    refreshDatabasePage;
+
+window.initDatabaseCrudPage =
+    initDatabaseCrudPage;
+
+console.log(
+    "Database bridge functions are ready."
+);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

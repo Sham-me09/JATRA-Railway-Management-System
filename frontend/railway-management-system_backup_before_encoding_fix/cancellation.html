@@ -1,0 +1,113 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ticket Cancellation Request - Railway JATRA: RAILWAY MANAGEMENT SYSTEM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              900: '#0f172a',
+              800: '#1e293b',
+              700: '#334155'
+            },
+            sky: {
+              bright: '#38bdf8',
+              light: '#e0f2fe',
+              subtle: '#f0f9ff'
+            },
+            accent: {
+              blue: '#0284c7',
+              hover: '#0369a1'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container navbar-container">
+      <a href="index.html" class="brand-logo" id="brandLogoLink">
+        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5-1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5-1.5zm1.5-5H6V8h12v4z"/></svg>
+        <span>JATRA: RAILWAY MANAGEMENT SYSTEM</span>
+      </a>
+
+      <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Toggle Navigation">â˜°</button>
+
+      <ul class="nav-menu" id="navMenu">
+        <li><a href="index.html" class="nav-link">Home</a></li>
+        <li><a href="search-train.html" class="nav-link">Search Trains</a></li>
+        <li><a href="my-tickets.html" class="nav-link">My Tickets</a></li>
+        <li><a href="complaint.html" class="nav-link">Complaints</a></li>
+      </ul>
+
+      <div class="nav-actions" id="navActions"></div>
+    </div>
+  </nav>
+
+  <div class="dashboard-container">
+    <!-- Sidebar rendered dynamically by main.js based on role -->
+    <aside class="sidebar">
+      <!-- Injected by renderRoleSidebar() in main.js -->
+    </aside>
+
+    <main class="dashboard-main">
+      <div class="dashboard-header mb-6">
+        <div class="dashboard-title">
+          <h1>Submit Ticket Cancellation Request</h1>
+          <p>As per Bangladesh Railway rules, 85% refund is issued for cancellations submitted 24h prior to departure</p>
+        </div>
+      </div>
+
+      <div class="card max-w-2xl mx-auto shadow-lg p-6 sm:p-8">
+        <form id="cancellationForm">
+          <div class="form-group mb-4">
+            <label class="form-label font-bold text-slate-800" for="cancelTicketId">Ticket ID / Booking Reference</label>
+            <input type="text" id="cancelTicketId" class="form-control" placeholder="e.g. TKT-99101" required>
+          </div>
+
+          <div class="form-group mb-4">
+            <label class="form-label font-bold text-slate-800" for="cancelReason">Reason for Cancellation</label>
+            <select id="cancelReason" class="form-select" required>
+              <option value="Personal Emergency">Personal Emergency</option>
+              <option value="Travel Schedule Changed">Travel Schedule Changed</option>
+              <option value="Booked Alternative Transport">Booked Alternative Transport</option>
+              <option value="Train Time Conflict">Train Time Conflict</option>
+            </select>
+          </div>
+
+          <div style="background-color: var(--warning-bg); color: #92400e; padding: 1rem; border-radius: var(--radius-md); font-size: 0.85rem; margin-bottom: 1.5rem;">
+            âš  <strong>Refund Policy Notice:</strong> Refunds are credited automatically back to the original payment source within 24-48 hours upon approval.
+          </div>
+
+          <button type="submit" id="submitCancelBtn" class="btn btn-danger btn-lg btn-full w-full">
+            Confirm & Submit Cancellation
+          </button>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <footer class="footer">
+    <div class="container text-center">
+      <p>&copy; 2026 Bangladesh JATRA: RAILWAY MANAGEMENT SYSTEM.</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+  <script src="js/dashboard.js"></script>    <script src="js/dashboard_db.js"></script>
+</body>
+</html>
+
+

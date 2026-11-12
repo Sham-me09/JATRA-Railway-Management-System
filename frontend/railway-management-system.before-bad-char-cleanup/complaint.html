@@ -1,0 +1,139 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>File Complaint - Railway JATRA: RAILWAY MANAGEMENT SYSTEM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              900: '#0f172a',
+              800: '#1e293b',
+              700: '#334155'
+            },
+            sky: {
+              bright: '#38bdf8',
+              light: '#e0f2fe',
+              subtle: '#f0f9ff'
+            },
+            accent: {
+              blue: '#0284c7',
+              hover: '#0369a1'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container navbar-container">
+      <a href="index.html" class="brand-logo" id="brandLogoLink">
+        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5-1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5-1.5zm1.5-5H6V8h12v4z"/></svg>
+        <span>JATRA: RAILWAY MANAGEMENT SYSTEM</span>
+      </a>
+
+      <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Toggle Navigation">â˜°</button>
+
+      <ul class="nav-menu" id="navMenu">
+        <li><a href="index.html" class="nav-link">Home</a></li>
+        <li><a href="search-train.html" class="nav-link">Search Trains</a></li>
+        <li><a href="my-tickets.html" class="nav-link">My Tickets</a></li>
+        <li><a href="complaint.html" class="nav-link active">Complaints</a></li>
+      </ul>
+
+      <div class="nav-actions" id="navActions"></div>
+    </div>
+  </nav>
+
+  <div class="dashboard-container">
+    <!-- Sidebar rendered dynamically by main.js based on role -->
+    <aside class="sidebar">
+      <!-- Injected by renderRoleSidebar() in main.js -->
+    </aside>
+
+    <main class="dashboard-main">
+      <div class="dashboard-header mb-6">
+        <div class="dashboard-title">
+          <h1>Passenger Support & Complaints</h1>
+          <p>Report service issues, cleanliness problems, delays, or staff feedback</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Complaint Form Card -->
+        <div class="card p-6 shadow-sm">
+          <h2 class="text-xl font-bold text-slate-800 mb-1">Submit Passenger Complaint</h2>
+          <p class="text-xs text-slate-500 mb-6">Report issues regarding coach cleanliness, AC malfunction, delay, or staff behavior.</p>
+
+          <form id="complaintForm">
+            <div class="form-group mb-4">
+              <label class="form-label font-semibold text-slate-700" for="cmpCategory">Complaint Category</label>
+              <select id="cmpCategory" class="form-select" required>
+                <option value="AC Non-Functional">AC Unit Non-Functional</option>
+                <option value="Cleanliness Issue">Coach Hygiene & Washroom</option>
+                <option value="Train Delay">Unannounced Delay</option>
+                <option value="Staff Misbehavior">Staff / TTE Misbehavior</option>
+                <option value="Seat Damage">Damaged Seat / Window</option>
+              </select>
+            </div>
+
+            <div class="form-group mb-4">
+              <label class="form-label font-semibold text-slate-700" for="cmpTrain">Train Name / ID</label>
+              <input type="text" id="cmpTrain" class="form-control" placeholder="e.g. Sonar Bangla Express (TR-701)" required>
+            </div>
+
+            <div class="form-group mb-6">
+              <label class="form-label font-semibold text-slate-700" for="cmpDesc">Detailed Description</label>
+              <textarea id="cmpDesc" class="form-control" rows="4" placeholder="Describe the incident, coach number, and time..." required></textarea>
+            </div>
+
+            <button type="submit" id="submitCmpBtn" class="btn btn-primary btn-lg btn-full w-full">Submit Complaint</button>
+          </form>
+        </div>
+
+        <!-- Filed Complaints Table -->
+        <div class="card p-6 shadow-sm">
+          <h3 class="text-lg font-bold text-slate-800 mb-4">My Submitted Complaints</h3>
+          <div class="table-responsive">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Category</th>
+                  <th>Train</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="complaintsListTable">
+                <!-- Injected by dashboard.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <footer class="footer">
+    <div class="container text-center">
+      <p>&copy; 2026 Bangladesh JATRA: RAILWAY MANAGEMENT SYSTEM.</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+  <script src="js/dashboard.js"></script>`r`n    <script src="js/dashboard_db.js"></script>
+</body>
+</html>
+

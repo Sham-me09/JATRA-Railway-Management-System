@@ -1,0 +1,273 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Dashboard - Railway JATRA: RAILWAY MANAGEMENT SYSTEM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              900: '#0f172a',
+              800: '#1e293b',
+              700: '#334155'
+            },
+            sky: {
+              bright: '#38bdf8',
+              light: '#e0f2fe',
+              subtle: '#f0f9ff'
+            },
+            accent: {
+              blue: '#0284c7',
+              hover: '#0369a1'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container navbar-container">
+      <a href="index.html" class="brand-logo" id="brandLogoLink">
+        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-5H6V8h12v4z"/></svg>
+        <span>JATRA: RAILWAY MANAGEMENT SYSTEM</span>
+      </a>
+
+      <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Toggle Navigation">&#9776;</button>
+
+      <ul class="nav-menu" id="navMenu">
+        <li><a href="index.html" class="nav-link">Home</a></li>
+        <li><a href="search-train.html" class="nav-link">Search Trains</a></li>
+        <li><a href="my-tickets.html" class="nav-link">My Tickets</a></li>
+        <li><a href="complaint.html" class="nav-link">Complaints</a></li>
+        <li><a href="lost-item.html" class="nav-link">Lost Item</a></li>
+      </ul>
+
+      <div class="nav-actions" id="navActions"></div>
+    </div>
+  </nav>
+
+  <div class="dashboard-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">Passenger Portal</div>
+      <nav class="sidebar-nav">
+        <a href="user-dashboard.html" class="sidebar-link active"><span>📊 Overview</span></a>
+        <a href="my-tickets.html" class="sidebar-link"><span>🎟️ My Tickets</span></a>
+        <a href="search-train.html" class="sidebar-link"><span>🔍 Search Trains</span></a>
+        <a href="cancellation.html" class="sidebar-link"><span>❌ Cancel Ticket</span></a>
+        <a href="refund.html" class="sidebar-link"><span>💳 Refund Status</span></a>
+        <a href="complaint.html" class="sidebar-link"><span>💬 Complaints</span></a>
+        <a href="lost-item.html" class="sidebar-link"><span>🧳 Lost Item</span></a>
+      </nav>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="dashboard-main">
+      <div class="dashboard-header">
+        <div class="dashboard-title">
+          <h1>Passenger Dashboard</h1>
+          <p>Welcome back, <strong id="dashUserName">Passenger</strong></p>
+        </div>
+        <a href="search-train.html" class="btn btn-primary">+ Book New Ticket</a>
+      </div>
+
+      <!-- ================================================================
+           TRAIN DELAY NOTIFICATIONS SECTION
+           Shows delay alerts for the passenger's own booked trains only.
+           Data tied to existing booking + delay attributes — no new fields.
+           ================================================================ -->
+      <div class="mb-6" id="delayNotificationsSection">
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <span style="font-size: 1.2rem;">🔔</span>
+          <h2 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-dark);">
+            Train Delay Notifications
+          </h2>
+          <span class="badge badge-info text-xs">Live Updates</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted); margin-left: auto;">
+            Only your booked trains are shown
+          </span>
+        </div>
+
+        <!-- Delay alerts populated by renderPassengerDelayAlertBanner() in main.js -->
+        <div id="passengerDelayAlertContainer"></div>
+
+        <!-- Shown when passenger has booked trains but none are delayed -->
+        <div id="passengerNoDelayPlaceholder" style="display: none;">
+          <div style="
+            display: flex;
+            align-items: center;
+            gap: 0.875rem;
+            padding: 1rem 1.25rem;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 0.75rem;
+          ">
+            <span style="font-size: 1.5rem; flex-shrink: 0;">✅</span>
+            <div>
+              <div style="font-weight: 700; color: #166534; font-size: 0.875rem;">
+                All your booked trains are on time
+              </div>
+              <div style="color: #16a34a; font-size: 0.75rem; margin-top: 0.2rem;">
+                No delay alerts for your current bookings. You'll be notified here instantly if any delay is reported for your train.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Shown when passenger has no bookings at all -->
+        <div id="passengerNoBookingPlaceholder" style="display: none;">
+          <div style="
+            display: flex;
+            align-items: center;
+            gap: 0.875rem;
+            padding: 1rem 1.25rem;
+            background: #f8fafc;
+            border: 1px dashed #cbd5e1;
+            border-radius: 0.75rem;
+          ">
+            <span style="font-size: 1.5rem; flex-shrink: 0;">🎫</span>
+            <div>
+              <div style="font-weight: 600; color: #475569; font-size: 0.875rem;">
+                No bookings yet
+              </div>
+              <div style="color: #94a3b8; font-size: 0.75rem; margin-top: 0.2rem;">
+                Book a train ticket to start receiving real-time delay notifications for your journey.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- ================================================================
+           END TRAIN DELAY NOTIFICATIONS SECTION
+           ================================================================ -->
+
+      <!-- Quick Metric Cards -->
+      <div class="metrics-grid mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="metric-card">
+          <div class="metric-info">
+            <h3>Active Tickets</h3>
+            <div class="metric-value" id="userActiveTickets">0</div>
+          </div>
+          <div class="metric-icon">🎫</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-info">
+            <h3>Total Spent</h3>
+            <div class="metric-value" id="userTotalSpent">&#2547;0</div>
+          </div>
+          <div class="metric-icon">💳</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-info">
+            <h3>Lost Item Claims</h3>
+            <div class="metric-value" id="userLostItemsCount">0</div>
+          </div>
+          <div class="metric-icon">🧳</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-info">
+            <h3>Phone Number</h3>
+            <div style="font-weight: 600; color: var(--primary-navy);" id="dashUserPhone">01711223344</div>
+          </div>
+          <div class="metric-icon">📱</div>
+        </div>
+      </div>
+
+      <!-- Search & Book Ticket Section -->
+      <div class="card mb-6" id="searchBookTicketSection" style="margin-bottom: 2rem;">
+        <div class="card-header flex justify-between items-center pb-3 border-b border-slate-200">
+          <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2" style="margin: 0;">
+            <span>🔍</span> Search &amp; Book Train Ticket
+          </h2>
+          <span class="badge badge-info text-xs">Real-Time Seat Availability</span>
+        </div>
+
+        <form id="dashTrainSearchForm" class="train-search-form mt-4" style="margin-top: 1rem;">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+              <label class="form-label font-bold text-xs">From (Origin Station)</label>
+              <select id="dashSearchFrom" class="form-select source-station-select" required>
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label font-bold text-xs">To (Destination Station)</label>
+              <select id="dashSearchTo" class="form-select dest-station-select" required>
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label font-bold text-xs">Journey Date</label>
+              <input type="date" id="dashSearchDate" class="form-control journey-date-input" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label font-bold text-xs">Number of Passengers</label>
+              <select id="dashSearchPassengers" class="form-select passenger-type-select">
+                <option value="1">1 Passenger (Adult)</option>
+                <option value="2">2 Passengers</option>
+                <option value="3">3 Passengers</option>
+                <option value="4">4 Passengers</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="flex justify-end mt-4 pt-3 border-t border-slate-100">
+            <button type="submit" id="dashSearchSubmitBtn" class="btn btn-primary" style="padding: 0.65rem 1.5rem; font-weight: 700;">
+              🔍 Search Trains
+            </button>
+          </div>
+        </form>
+
+        <!-- Search Results Container -->
+        <div id="dashSearchResultsContainer" class="mt-5 pt-4 border-t border-slate-200">
+          <div class="flex justify-between items-center mb-3">
+            <h3 class="text-sm font-bold text-slate-700" style="margin: 0;">Available Trains for Selected Route:</h3>
+            <span id="dashResultsCountBadge" class="text-xs text-slate-500 font-semibold"></span>
+          </div>
+          <div id="dashTrainResultsList" class="space-y-3">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- MY TICKETS Section (Fixed & Persistent) -->
+      <div class="card mb-6" id="myTicketsSection" style="margin-bottom: 2rem;">
+        <div class="card-header flex justify-between items-center pb-3 border-b border-slate-200">
+          <div class="flex items-center gap-2">
+            <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2" style="margin: 0;">
+              <span>🎟️</span> MY TICKETS
+            </h2>
+            <span id="myTicketsCountBadge" class="badge badge-navy text-xs">0 Bookings</span>
+          </div>
+          <a href="my-tickets.html" class="btn btn-outline btn-sm">Full Screen View</a>
+        </div>
+
+        <div id="dashMyTicketsContainer" class="p-2">
+          <!-- Rendered dynamically by dashboard.js -->
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/main.js"></script>
+  <script src="js/dashboard.js"></script>    <script src="js/dashboard_db.js"></script>
+</body>
+</html>
+

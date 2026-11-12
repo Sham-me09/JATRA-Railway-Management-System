@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Booking Confirmation - Railway JATRA: RAILWAY MANAGEMENT SYSTEM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              900: '#0f172a',
+              800: '#1e293b',
+              700: '#334155'
+            },
+            sky: {
+              bright: '#38bdf8',
+              light: '#e0f2fe',
+              subtle: '#f0f9ff'
+            },
+            accent: {
+              blue: '#0284c7',
+              hover: '#0369a1'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container navbar-container">
+      <a href="index.html" class="brand-logo" id="brandLogoLink">
+        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5-1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5-1.5zm1.5-5H6V8h12v4z"/></svg>
+        <span>JATRA: RAILWAY MANAGEMENT SYSTEM</span>
+      </a>
+
+      <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Toggle Navigation">☰</button>
+
+      <ul class="nav-menu" id="navMenu">
+        <li><a href="index.html" class="nav-link">Home</a></li>
+        <li><a href="search-train.html" class="nav-link">Search Trains</a></li>
+        <li><a href="my-tickets.html" class="nav-link active">My Tickets</a></li>
+        <li><a href="complaint.html" class="nav-link">Complaints</a></li>
+      </ul>
+
+      <div class="nav-actions" id="navActions"></div>
+    </div>
+  </nav>
+
+  <div class="container container-sm" style="padding: 3rem 1.5rem; min-height: 80vh;">
+    <div class="text-center" style="margin-bottom: 2rem;">
+      <div style="width: 64px; height: 64px; background-color: var(--success-bg); color: var(--success); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto; font-size: 2rem;">
+        ✓
+      </div>
+      <h1 style="font-size: 2rem;">Booking Successful & Ticket Issued</h1>
+      <p>Your transaction has been processed. Present this digital ticket voucher or printed copy during boarding.</p>
+    </div>
+
+    <!-- Voucher Container -->
+    <div id="confirmedTicketVoucher">
+      <!-- Injected by payment.js -->
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="container text-center">
+      <p>&copy; 2026 Bangladesh JATRA: RAILWAY MANAGEMENT SYSTEM.</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+  <script src="js/payment.js"></script>
+</body>
+</html>

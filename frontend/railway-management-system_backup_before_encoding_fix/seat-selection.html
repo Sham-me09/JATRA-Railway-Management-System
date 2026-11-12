@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Seat Selection - Railway JATRA: RAILWAY MANAGEMENT SYSTEM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              900: '#0f172a',
+              800: '#1e293b',
+              700: '#334155'
+            },
+            sky: {
+              bright: '#38bdf8',
+              light: '#e0f2fe',
+              subtle: '#f0f9ff'
+            },
+            accent: {
+              blue: '#0284c7',
+              hover: '#0369a1'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container navbar-container">
+      <a href="index.html" class="brand-logo" id="brandLogoLink">
+        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-5H6V8h12v4z"/></svg>
+        <span>JATRA: RAILWAY MANAGEMENT SYSTEM</span>
+      </a>
+
+      <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Toggle Navigation">☰</button>
+
+      <ul class="nav-menu" id="navMenu">
+        <li><a href="index.html" class="nav-link">Home</a></li>
+        <li><a href="search-train.html" class="nav-link active">Search Trains</a></li>
+        <li><a href="my-tickets.html" class="nav-link">My Tickets</a></li>
+        <li><a href="complaint.html" class="nav-link">Complaints</a></li>
+      </ul>
+
+      <div class="nav-actions" id="navActions"></div>
+    </div>
+  </nav>
+
+  <div class="container" style="padding: 2.5rem 1.5rem; min-height: 80vh;">
+    <div id="selectedTrainHeader" class="card" style="margin-bottom: 2rem;"></div>
+
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2rem;" class="form-row">
+      
+      <!-- Seat Selection Grid Column -->
+      <div class="card">
+        <h3>Select Coach Class & Seat Layout</h3>
+        <p style="font-size: 0.9rem;">Click on any available seat to add it to your booking cart (max 4 seats).</p>
+
+        <!-- Coach Selector Tabs -->
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+          <button class="btn btn-navy coach-btn" data-coach="KA" data-price="1170">KA (AC Berth - ৳1,170)</button>
+          <button class="btn btn-outline coach-btn" data-coach="KHA" data-price="910">KHA (Snigdha - ৳910)</button>
+          <button class="btn btn-outline coach-btn" data-coach="GA" data-price="650">GA (Shovon Chair - ৳650)</button>
+        </div>
+
+        <!-- Legend -->
+        <div class="seat-legend">
+          <div class="legend-item"><div class="legend-box" style="background: #ffffff; border: 1px solid var(--accent-blue);"></div> Available</div>
+          <div class="legend-item"><div class="legend-box" style="background: var(--accent-blue);"></div> Selected</div>
+          <div class="legend-item"><div class="legend-box" style="background: var(--border-color);"></div> Booked</div>
+        </div>
+
+        <!-- Interactive Seat Grid -->
+        <div class="seat-grid-wrapper" id="seatGridContainer">
+          <!-- Injected by booking.js -->
+        </div>
+      </div>
+
+      <!-- Booking Summary Sidebar -->
+      <div class="card" style="height: fit-content;">
+        <h3 style="border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">Booking Summary</h3>
+        
+        <div style="margin: 1.25rem 0; font-size: 0.95rem; line-height: 2;">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">Seats Selected:</span>
+            <strong id="summarySeatCount">0</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">Selected Seat IDs:</span>
+            <strong id="summarySeatList" style="color: var(--accent-blue);">None</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">Base Fare Subtotal:</span>
+            <strong id="summaryTotalFare">৳0</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">VAT (5%):</span>
+            <strong id="summaryVat">৳0</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">Service Charge:</span>
+            <strong>৳20</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 1.25rem; font-weight: 800; color: var(--primary-navy); border-top: 1px solid var(--border-color); padding-top: 0.75rem; margin-top: 0.5rem;">
+            <span>Grand Total:</span>
+            <span id="summaryGrandTotal" style="color: var(--accent-blue);">৳20</span>
+          </div>
+        </div>
+
+        <button id="proceedToPassengerBtn" class="btn btn-primary btn-lg btn-full">
+          Continue to Passenger Details →
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="container text-center">
+      <p>&copy; 2026 Bangladesh JATRA: RAILWAY MANAGEMENT SYSTEM.</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+  <script src="js/booking.js"></script>
+</body>
+</html>

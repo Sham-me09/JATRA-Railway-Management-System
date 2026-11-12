@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Checkout - Railway JATRA: RAILWAY MANAGEMENT SYSTEM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              900: '#0f172a',
+              800: '#1e293b',
+              700: '#334155'
+            },
+            sky: {
+              bright: '#38bdf8',
+              light: '#e0f2fe',
+              subtle: '#f0f9ff'
+            },
+            accent: {
+              blue: '#0284c7',
+              hover: '#0369a1'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container navbar-container">
+      <a href="index.html" class="brand-logo" id="brandLogoLink">
+        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5-1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5-1.5zm1.5-5H6V8h12v4z"/></svg>
+        <span>JATRA: RAILWAY MANAGEMENT SYSTEM</span>
+      </a>
+
+      <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Toggle Navigation">☰</button>
+
+      <ul class="nav-menu" id="navMenu">
+        <li><a href="index.html" class="nav-link">Home</a></li>
+        <li><a href="search-train.html" class="nav-link active">Search Trains</a></li>
+        <li><a href="my-tickets.html" class="nav-link">My Tickets</a></li>
+        <li><a href="complaint.html" class="nav-link">Complaints</a></li>
+      </ul>
+
+      <div class="nav-actions" id="navActions"></div>
+    </div>
+  </nav>
+
+  <div class="container" style="padding: 2.5rem 1.5rem; min-height: 80vh;">
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2rem;" class="form-row">
+      
+      <!-- Payment Options Column -->
+      <div class="card">
+        <h2>Select Secure Payment Gateway</h2>
+        <p style="font-size: 0.9rem; color: var(--text-muted);">Choose your preferred payment method to issue digital ticket immediately.</p>
+
+        <!-- Payment Tabs -->
+        <div style="display: flex; gap: 0.75rem; margin: 1.5rem 0;" class="form-row">
+          <button class="btn btn-primary payment-tab" data-method="Mobile Banking">📅± bKash / Nagad / Rocket</button>
+          <button class="btn btn-outline payment-tab" data-method="Credit Card">💳 Debit / Credit Card</button>
+          <button class="btn btn-outline payment-tab" data-method="Net Banking">🏦 Internet Banking</button>
+        </div>
+
+        <div style="background-color: var(--surface-bg); padding: 1.5rem; border-radius: var(--radius-md); border: 1px dashed var(--accent-blue); margin-bottom: 1.5rem;">
+          <div class="form-group">
+            <label class="form-label" for="paymentAccountNum">Account / Phone / Card Number</label>
+            <input type="text" id="paymentAccountNum" class="form-control" placeholder="e.g. 01700000000" value="01711223344" required>
+          </div>
+
+          <div class="form-group" style="margin: 0;">
+            <label class="form-label" for="paymentPin">Security PIN / OTP Code</label>
+            <input type="password" id="paymentPin" class="form-control" placeholder="Enter 1234 for simulator" value="1234" required>
+          </div>
+        </div>
+
+        <button id="confirmPaymentBtn" class="btn btn-primary btn-lg btn-full">
+          Confirm Payment & Issue E-Ticket
+        </button>
+      </div>
+
+      <!-- Amount Summary Box -->
+      <div class="card" style="height: fit-content;">
+        <h3>Payable Summary</h3>
+        <div id="paymentBookingOverview" style="margin: 1rem 0; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color);"></div>
+
+        <div style="font-size: 1.35rem; font-weight: 800; color: var(--primary-navy); display: flex; justify-content: space-between; margin-top: 0.5rem;">
+          <span>Total Amount:</span>
+          <span id="paymentAmount" style="color: var(--success);">à§³0</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="container text-center">
+      <p>&copy; 2026 Bangladesh JATRA: RAILWAY MANAGEMENT SYSTEM.</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+  <script src="js/payment.js"></script>
+</body>
+</html>
+

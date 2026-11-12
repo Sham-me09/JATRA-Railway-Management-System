@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register Account - Railway JATRA: RAILWAY MANAGEMENT SYSTEM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              900: '#0f172a',
+              800: '#1e293b',
+              700: '#334155'
+            },
+            sky: {
+              bright: '#38bdf8',
+              light: '#e0f2fe',
+              subtle: '#f0f9ff'
+            },
+            accent: {
+              blue: '#0284c7',
+              hover: '#0369a1'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/auth.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container navbar-container">
+      <a href="index.html" class="brand-logo" id="brandLogoLink">
+        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-5H6V8h12v4z"/></svg>
+        <span>JATRA: RAILWAY MANAGEMENT SYSTEM</span>
+      </a>
+      <div class="nav-actions" id="navActions"></div>
+    </div>
+  </nav>
+
+  <div class="auth-wrapper py-10 px-4 min-h-[calc(100vh-140px)] flex items-center justify-center bg-slate-900">
+    <div class="auth-card max-w-2xl w-full bg-slate-800/90 border border-slate-700/80 rounded-2xl shadow-2xl p-6 sm:p-8 backdrop-blur-md">
+      <div class="auth-header text-center mb-6">
+        <div class="w-16 h-16 mx-auto mb-3 bg-sky-500/10 border border-sky-400/20 text-sky-400 rounded-2xl flex items-center justify-center text-3xl shadow-inner">
+          👤
+        </div>
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Passenger Account Registration</h1>
+        <p class="text-slate-400 text-sm mt-1">Create an account to book e-tickets, select seats, and manage train journeys</p>
+      </div>
+
+      <!-- Staff Creation Info Alert -->
+      <div class="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs sm:text-sm leading-relaxed flex items-start gap-3">
+        <span class="text-xl shrink-0">ℹ️</span>
+        <div>
+          <strong class="font-bold text-amber-200 block mb-0.5">Registration Scope Notice:</strong>
+          Public registration is strictly for <strong>Passengers</strong>. Staff accounts (<span class="text-white font-semibold">Ticket Managers</span> and <span class="text-white font-semibold">Station Masters</span>) are created and managed by System Administrators.
+        </div>
+      </div>
+
+      <form id="registerForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="regName">Full Name</label>
+            <input type="text" id="regName" class="form-control" placeholder="e.g. Rahim Ahmed" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="regEmail">Email Address</label>
+            <input type="email" id="regEmail" class="form-control" placeholder="rahim@gmail.com" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="regPhone">Phone Number</label>
+            <input type="tel" id="regPhone" class="form-control" placeholder="01711223344" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="regNid">NID / Smart Card Number</label>
+            <input type="text" id="regNid" class="form-control" placeholder="1994829102931" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="regDob">Date of Birth</label>
+            <input type="date" id="regDob" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="regGender">Gender</label>
+            <select id="regGender" class="form-select" required>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="regAddress">Residential Address</label>
+          <input type="text" id="regAddress" class="form-control" placeholder="House 12, Road 4, Dhanmondi, Dhaka" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="regPassword">Account Password</label>
+          <input type="password" id="regPassword" class="form-control" placeholder="Minimum 6 characters" required>
+        </div>
+
+        <button type="submit" id="regSubmitBtn" class="btn btn-primary btn-lg btn-full" style="margin-top: 1rem;">
+          Complete Registration
+        </button>
+      </form>
+
+      <div class="auth-footer">
+        Already have an account? <a href="login.html">Login Here</a>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="container text-center">
+      <p>&copy; 2026 Bangladesh JATRA: RAILWAY MANAGEMENT SYSTEM.</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+  <script src="js/auth.js"></script>
+</body>
+</html>

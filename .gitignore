@@ -1,0 +1,34 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+
+# Logs
+*.log
+
+# Operating system
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE temporary files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.temp

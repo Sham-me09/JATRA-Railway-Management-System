@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bangladesh Railway - Online E-Ticket Booking & Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              900: '#0f172a',
+              800: '#1e293b',
+              700: '#334155'
+            },
+            sky: {
+              bright: '#38bdf8',
+              light: '#e0f2fe',
+              subtle: '#f0f9ff'
+            },
+            accent: {
+              blue: '#0284c7',
+              hover: '#0369a1'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container navbar-container">
+      <a href="index.html" class="brand-logo" id="brandLogoLink">
+        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-5H6V8h12v4z"/></svg>
+        <span>JATRA: RAILWAY MANAGEMENT SYSTEM</span>
+      </a>
+
+      <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Toggle Navigation">☰</button>
+
+      <ul class="nav-menu" id="navMenu">
+        <li><a href="index.html" class="nav-link active">Home</a></li>
+        <li><a href="search-train.html" class="nav-link">Search Trains</a></li>
+        <li><a href="my-tickets.html" class="nav-link">My Tickets</a></li>
+        <li><a href="complaint.html" class="nav-link">Complaints</a></li>
+      </ul>
+
+      <div class="nav-actions" id="navActions">
+        <!-- Injected dynamically by main.js -->
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section style="background: linear-gradient(135deg, var(--primary-navy) 0%, #1e293b 100%); color: #ffffff; padding: 4rem 0 5rem 0;">
+    <div class="container">
+      <div style="max-width: 800px; margin: 0 auto; text-align: center; margin-bottom: 2.5rem;">
+        <span class="badge badge-navy" style="margin-bottom: 1rem; color: var(--sky-bright); background: rgba(56, 189, 248, 0.15);">OFFICIAL E-TICKETING SYSTEM</span>
+        <h1 style="color: #ffffff; font-size: 2.75rem; font-weight: 800; line-height: 1.2;">Welcome to Bangladesh Railway E-Ticketing Platform</h1>
+        <p style="color: #cbd5e1; font-size: 1.1rem;">Search schedules, select seats interactively, book tickets instantly, and manage your train journeys easily.</p>
+      </div>
+
+      <!-- Quick Search Card -->
+      <div class="card" style="max-width: 960px; margin: 0 auto; box-shadow: var(--shadow-xl); padding: 2rem;">
+        <form class="train-search-form" id="heroSearchForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="heroSourceSelect">From Station</label>
+              <select id="heroSourceSelect" class="form-select source-station-select" required>
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="heroDestSelect">To Station</label>
+              <select id="heroDestSelect" class="form-select dest-station-select" required>
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="heroDateInput">Date of Journey</label>
+              <input type="date" id="heroDateInput" class="form-control journey-date-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="heroClassSelect">Passenger Class</label>
+              <select id="heroClassSelect" class="form-select passenger-type-select">
+                <option value="AC_BERTH">AC Berth (1st Class)</option>
+                <option value="SNIGDHA" selected>AC Seat (Snigdha)</option>
+                <option value="S_CHAIR">Shovon Chair</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" id="heroSearchSubmitBtn" class="btn btn-primary btn-lg btn-full" style="margin-top: 0.5rem;">
+            🔍 Search Trains & Available Seats
+          </button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- Popular Routes Section -->
+  <section style="padding: 4rem 0; background-color: var(--surface-bg);">
+    <div class="container">
+      <div style="text-align: center; margin-bottom: 3rem;">
+        <h2>Popular Express Routes</h2>
+        <p>Explore Bangladesh's most requested intercity train corridors with high frequency</p>
+      </div>
+
+      <div class="form-row">
+        <div class="card card-hover">
+          <span class="badge badge-navy" style="margin-bottom: 0.5rem;">Intercity Express</span>
+          <h3>Dhaka → Chattogram</h3>
+          <p style="font-size: 0.9rem;">Sonar Bangla & Suborno Express. Travel time approx 5h 15m.</p>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+            <span style="font-weight: 800; color: var(--accent-blue); font-size: 1.2rem;">From ৳650</span>
+            <a href="search-train.html" class="btn btn-outline btn-sm">Book Ticket</a>
+          </div>
+        </div>
+
+        <div class="card card-hover">
+          <span class="badge badge-navy" style="margin-bottom: 0.5rem;">Super Fast Express</span>
+          <h3>Dhaka → Cox's Bazar</h3>
+          <p style="font-size: 0.9rem;">Cox's Bazar Express. Direct ocean coast route. Travel time 8h 30m.</p>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+            <span style="font-weight: 800; color: var(--accent-blue); font-size: 1.2rem;">From ৳950</span>
+            <a href="search-train.html" class="btn btn-outline btn-sm">Book Ticket</a>
+          </div>
+        </div>
+
+        <div class="card card-hover">
+          <span class="badge badge-navy" style="margin-bottom: 0.5rem;">Scenic Route</span>
+          <h3>Dhaka → Sylhet</h3>
+          <p style="font-size: 0.9rem;">Kalindi & Parabat Express through tea gardens. Travel time 6h 40m.</p>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+            <span style="font-weight: 800; color: var(--accent-blue); font-size: 1.2rem;">From ৳520</span>
+            <a href="search-train.html" class="btn btn-outline btn-sm">Book Ticket</a>
+          </div>
+        </div>
+
+        <div class="card card-hover">
+          <span class="badge badge-navy" style="margin-bottom: 0.5rem;">Western Line</span>
+          <h3>Dhaka → Rajshahi</h3>
+          <p style="font-size: 0.9rem;">Silkcity Express over Padma Bridge corridor. Travel time 5h 50m.</p>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+            <span style="font-weight: 800; color: var(--accent-blue); font-size: 1.2rem;">From ৳480</span>
+            <a href="search-train.html" class="btn btn-outline btn-sm">Book Ticket</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h3>BANGLADESH RAILWAY</h3>
+          <p>Official E-Ticketing System for Railway Transport Management & Database Project.</p>
+        </div>
+        <div class="footer-links">
+          <h4>Passenger Services</h4>
+          <ul>
+            <li><a href="search-train.html">Search Trains</a></li>
+            <li><a href="my-tickets.html">My Tickets</a></li>
+            <li><a href="cancellation.html">Ticket Cancellation</a></li>
+            <li><a href="refund.html">Check Refund Status</a></li>
+          </ul>
+        </div>
+        <div class="footer-links">
+          <h4>Support & Help</h4>
+          <ul>
+            <li><a href="complaint.html">File a Complaint</a></li>
+            <li><a href="login.html">User Portal Login</a></li>
+            <li><a href="admin-dashboard.html">Admin Dashboard</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Bangladesh JATRA: RAILWAY MANAGEMENT SYSTEM. All Rights Reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+  <script src="js/train.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const today = new Date().toISOString().split('T')[0];
+      const dateInput = document.getElementById('heroDateInput');
+      if (dateInput) dateInput.value = today;
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,384 @@
+/**
+ * Train Search & Details Handler
+ */
+
+document.addEventListener('DOMContentLoaded', async () => {
+  // ── Load stations from API, fall back to localStorage ─────────────────────
+  let stations = [];
+  const apiStationsResult = await apiCall('GET', '/api/stations');
+  if (apiStationsResult.ok && apiStationsResult.data && apiStationsResult.data.stations) {
+    stations = apiStationsResult.data.stations.map(s => ({
+      name: s.station_name,
+      code: s.station_code,
+      city: s.city,
+    }));
+    // Cache for offline use
+    if (stations.length > 0) {
+      localStorage.setItem('stations', JSON.stringify(stations));
+    }
+  } else {
+    // Fallback to localStorage
+    stations = JSON.parse(localStorage.getItem('stations') || '[]');
+  }
+
+  const sourceSelects = document.querySelectorAll('.source-station-select');
+  const destSelects = document.querySelectorAll('.dest-station-select');
+
+  function populateSelects(selectElements, defaultValue = '') {
+    selectElements.forEach(select => {
+      if (!select) return;
+      select.innerHTML = '<option value="">Select Station</option>';
+      stations.forEach(st => {
+        const option = document.createElement('option');
+        option.value = st.name;
+        option.textContent = `${st.name} (${st.code})`;
+        if (st.name === defaultValue) option.selected = true;
+        select.appendChild(option);
+      });
+    });
+  }
+
+  // Load saved search query if on train-results.html or train-details.html
+  const currentQuery = JSON.parse(localStorage.getItem('currentSearchQuery') || '{}');
+  populateSelects(sourceSelects, currentQuery.source || 'Dhaka (Kamalapur)');
+  populateSelects(destSelects, currentQuery.destination || 'Chattogram Junction');
+
+  // Search Form Submit Handler
+  const searchForms = document.querySelectorAll('.train-search-form');
+  searchForms.forEach(form => {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const source = form.querySelector('.source-station-select').value;
+      const destination = form.querySelector('.dest-station-select').value;
+      const date = form.querySelector('.journey-date-input')?.value || new Date().toISOString().split('T')[0];
+      const passengerType = form.querySelector('.passenger-type-select')?.value || 'Adult';
+
+      if (!source || !destination) {
+        showToast('Please select both source and destination stations.', 'danger');
+        return;
+      }
+
+      if (source === destination) {
+        showToast('Source and destination cannot be the same station.', 'warning');
+        return;
+      }
+
+      const query = { source, destination, date, passengerType };
+      localStorage.setItem('currentSearchQuery', JSON.stringify(query));
+      window.location.href = 'train-results.html';
+    });
+  });
+
+  // Render Search Results Page
+  if (window.location.pathname.includes('train-results.html')) {
+    renderTrainResults();
+  }
+
+  // Render Train Details Page
+  if (window.location.pathname.includes('train-details.html')) {
+    renderTrainDetails();
+  }
+});
+
+
+
+async function renderTrainResults() {
+  const container = document.getElementById('trainResultsList');
+  if (!container) return;
+
+  const searchQuery = JSON.parse(localStorage.getItem('currentSearchQuery') || '{}');
+  const filterSource = searchQuery.source || '';
+  const filterDest = searchQuery.destination || '';
+  const searchDate = searchQuery.date || new Date().toISOString().split('T')[0];
+
+  // Show loading state
+  container.innerHTML = `<div class="card text-center" style="padding: 3rem;"><p>🔍 Searching available trains...</p></div>`;
+
+  // ── Try API first ──────────────────────────────────────────────────────────
+  let matching = [];
+  const params = new URLSearchParams();
+  if (filterSource) params.set('from', filterSource);
+  if (filterDest) params.set('to', filterDest);
+  if (searchDate) params.set('date', searchDate);
+
+  const apiResult = await apiCall('GET', `/api/trains/search?${params.toString()}`);
+
+  if (apiResult.ok && apiResult.data && Array.isArray(apiResult.data.trains)) {
+    matching = apiResult.data.trains.map(t => ({
+  ...t,
+
+  // Frontend field names
+  id: t.train_id,
+  name: t.train_name,
+  type: t.train_category,
+
+  source: t.origin_station_name,
+  destination: t.destination_station_name,
+
+  offDay: t.weekly_off_day,
+
+  deptTime: t.departure_time,
+  arrTime: t.arrival_time,
+
+  scheduleId: t.schedule_id,
+  schedule_id: t.schedule_id,
+  journeyDate: t.journey_date,
+
+  availableSeats: t.available_seats,
+
+  // Existing backend does not return duration/fare.
+  duration: '5h',
+
+  // Distance is returned by backend.
+  // Keep 0 here until the actual fare rate is fetched/calculated.
+  fare: 0
+}));
+    // Cache results for train details page (uses localStorage.trains for details view)
+    if (matching.length > 0) {
+      // Merge into localStorage trains cache so train-details.html can still work
+      const existing = JSON.parse(localStorage.getItem('trains') || '[]');
+      matching.forEach(apiTrain => {
+        const idx = existing.findIndex(t => t.id === apiTrain.id);
+        if (idx >= 0) existing[idx] = { ...existing[idx], ...apiTrain };
+        else existing.push(apiTrain);
+      });
+      localStorage.setItem('trains', JSON.stringify(existing));
+    }
+  } else {
+    // ── Fallback: localStorage mock data ──────────────────────────────────────
+    console.warn('[TRAIN SEARCH] API unavailable, using localStorage fallback.');
+    const trains = JSON.parse(localStorage.getItem('trains') || '[]');
+    matching = trains.filter(t => {
+      let matchSrc = !filterSource || (t.source || '').toLowerCase().includes(filterSource.toLowerCase());
+      let matchDst = !filterDest || (t.destination || '').toLowerCase().includes(filterDest.toLowerCase());
+      return matchSrc && matchDst;
+    });
+  }
+
+  // Display Search summary
+  const querySummary = document.getElementById('searchQuerySummary');
+  if (querySummary) {
+    querySummary.innerHTML = `
+      <strong>${filterSource || 'All Routes'}</strong> → <strong>${filterDest || 'All Destinations'}</strong>
+      <span style="color: var(--text-muted); font-size: 0.9rem; margin-left: 1rem;">
+        Date: ${searchDate} | ${matching.length} Trains Available
+      </span>
+    `;
+  }
+
+  if (matching.length === 0) {
+    container.innerHTML = `
+      <div class="card text-center" style="padding: 3rem;">
+        <h3 style="color: var(--primary-navy);">No Trains Found</h3>
+        <p>There are no direct trains listed for this route on your selected date. Try searching all trains or choosing a different route.</p>
+        <button onclick="clearSearchFilter()" class="btn btn-primary" style="margin-top: 1rem;">View All Trains</button>
+      </div>
+    `;
+    return;
+  }
+
+
+  container.innerHTML = matching.map(t => `
+    <div class="card card-hover" style="margin-bottom: 1.25rem;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
+            <span class="badge badge-navy">${t.id}</span>
+            <h3 style="margin: 0; font-size: 1.25rem;">${t.name}</h3>
+            <span class="badge badge-info">${t.type}</span>
+          </div>
+          <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">
+            Off-day: <strong>${t.offDay}</strong> | Route: ${t.source} to ${t.destination}
+          </p>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 1.5rem; font-weight: 800; color: var(--accent-blue);">${formatBDT(t.fare)}</div>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">per seat (Base Fare)</span>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; background-color: var(--surface-bg); padding: 1rem; border-radius: var(--radius-md); margin: 1.25rem 0;">
+        <div>
+          <div style="font-size: 0.8rem; color: var(--text-muted);">Departure</div>
+          <div style="font-size: 1.1rem; font-weight: 700; color: var(--primary-navy);">${t.deptTime}</div>
+          <div style="font-size: 0.85rem; color: var(--text-muted);">${t.source}</div>
+        </div>
+        <div style="text-align: center; display: flex; flex-direction: column; justify-content: center;">
+          <div style="font-size: 0.8rem; color: var(--text-muted);">Duration</div>
+          <div style="font-weight: 600; color: var(--accent-blue);">${t.duration}</div>
+          <div style="height: 2px; background-color: var(--accent-blue); margin: 4px 0; border-radius: 2px;"></div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 0.8rem; color: var(--text-muted);">Arrival</div>
+          <div style="font-size: 1.1rem; font-weight: 700; color: var(--primary-navy);">${t.arrTime}</div>
+          <div style="font-size: 0.85rem; color: var(--text-muted);">${t.destination}</div>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+        <div style="font-size: 0.9rem; color: var(--success); font-weight: 600;">
+          ✔ ${t.availableSeats} Available Seats in 4 Coach Classes
+        </div>
+        <div style="display: flex; gap: 0.75rem;">
+          <button onclick="viewTrainDetails('${t.id}')" class="btn btn-outline btn-sm">View Schedule & Route</button>
+          <button onclick="startBooking('${t.id}')" class="btn btn-primary btn-sm">Select Coach & Book</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function clearSearchFilter() {
+  localStorage.setItem('currentSearchQuery', JSON.stringify({ source: '', destination: '' }));
+  renderTrainResults();
+}
+
+function viewTrainDetails(trainId) {
+  localStorage.setItem('selectedTrainId', trainId);
+  window.location.href = 'train-details.html';
+}
+
+function startBooking(trainId) {
+  const trains = JSON.parse(localStorage.getItem('trains') || '[]');
+  const train = trains.find(t => t.id === trainId);
+
+  localStorage.setItem('selectedTrainId', trainId);
+
+  if (train) {
+    localStorage.setItem(
+      'selectedScheduleId',
+      train.scheduleId || train.schedule_id || ''
+    );
+  }
+
+  window.location.href = 'seat-selection.html';
+}
+
+function renderTrainDetails() {
+  const trainId = localStorage.getItem('selectedTrainId') || 'TR-701';
+  const trains = JSON.parse(localStorage.getItem('trains') || '[]');
+  const train = trains.find(t => t.id === trainId) || trains[0];
+
+  const detailContainer = document.getElementById('trainDetailContent');
+  if (!detailContainer) return;
+
+  detailContainer.innerHTML = `
+    <div class="card" style="margin-bottom: 2rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+        <div>
+          <span class="badge badge-navy">${train.id}</span>
+          <h1 style="margin: 0.5rem 0 0.25rem 0;">${train.name}</h1>
+          <p style="margin: 0; color: var(--text-muted);">${train.type} Intercity Train | Off-Day: ${train.offDay}</p>
+        </div>
+        <button onclick="startBooking('${train.id}')" class="btn btn-primary btn-lg">Book Tickets Now</button>
+      </div>
+
+      <div class="form-row" style="margin-bottom: 1.5rem;">
+        <div class="card" style="background-color: var(--sky-subtle); border-color: var(--sky-light);">
+          <div style="font-size: 0.85rem; color: var(--text-muted);">Source Station</div>
+          <div style="font-size: 1.25rem; font-weight: 700; color: var(--primary-navy);">${train.source}</div>
+          <div style="font-size: 0.9rem; color: var(--accent-blue); font-weight: 600;">Departs: ${train.deptTime}</div>
+        </div>
+        <div class="card" style="background-color: var(--sky-subtle); border-color: var(--sky-light);">
+          <div style="font-size: 0.85rem; color: var(--text-muted);">Destination Station</div>
+          <div style="font-size: 1.25rem; font-weight: 700; color: var(--primary-navy);">${train.destination}</div>
+          <div style="font-size: 0.9rem; color: var(--accent-blue); font-weight: 600;">Arrives: ${train.arrTime}</div>
+        </div>
+        <div class="card" style="background-color: var(--sky-subtle); border-color: var(--sky-light);">
+          <div style="font-size: 0.85rem; color: var(--text-muted);">Travel Duration</div>
+          <div style="font-size: 1.25rem; font-weight: 700; color: var(--primary-navy);">${train.duration}</div>
+          <div style="font-size: 0.9rem; color: var(--text-muted);">Total Coaches: ${train.totalCoaches}</div>
+        </div>
+      </div>
+
+      <h3 style="margin-bottom: 1rem;">Coach & Class Fares</h3>
+      <div class="table-responsive" style="margin-bottom: 2rem;">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Class Name</th>
+              <th>Seat Type</th>
+              <th>Base Fare</th>
+              <th>VAT (5%)</th>
+              <th>Available Seats</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>AC Berth (1st Class)</strong></td>
+              <td>Sleeper Cabin</td>
+              <td>${formatBDT(train.fare * 1.8)}</td>
+              <td>${formatBDT(train.fare * 1.8 * 0.05)}</td>
+              <td><span class="badge badge-success">18 Available</span></td>
+              <td><button onclick="startBooking('${train.id}')" class="btn btn-sm btn-outline">Select</button></td>
+            </tr>
+            <tr>
+              <td><strong>AC Seat / Snigdha</strong></td>
+              <td>Air Conditioned Recliner</td>
+              <td>${formatBDT(train.fare * 1.4)}</td>
+              <td>${formatBDT(train.fare * 1.4 * 0.05)}</td>
+              <td><span class="badge badge-success">34 Available</span></td>
+              <td><button onclick="startBooking('${train.id}')" class="btn btn-sm btn-outline">Select</button></td>
+            </tr>
+            <tr>
+              <td><strong>Shovon Chair</strong></td>
+              <td>Standard Cushion Seat</td>
+              <td>${formatBDT(train.fare)}</td>
+              <td>${formatBDT(train.fare * 0.05)}</td>
+              <td><span class="badge badge-success">62 Available</span></td>
+              <td><button onclick="startBooking('${train.id}')" class="btn btn-sm btn-outline">Select</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Route & Halt Stations</h3>
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Station Name</th>
+              <th>Arrival Time</th>
+              <th>Halt Duration</th>
+              <th>Departure Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td><strong>${train.source}</strong></td>
+              <td>--</td>
+              <td>--</td>
+              <td>${train.deptTime}</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Airport Station (DKA)</td>
+              <td>+25 mins</td>
+              <td>5 mins</td>
+              <td>+30 mins</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>Cumilla Junction</td>
+              <td>+2h 15m</td>
+              <td>8 mins</td>
+              <td>+2h 23m</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td><strong>${train.destination}</strong></td>
+              <td>${train.arrTime}</td>
+              <td>--</td>
+              <td>--</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+

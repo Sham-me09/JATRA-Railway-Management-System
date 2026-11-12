@@ -1,0 +1,157 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage Payments - Railway Admin Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              900: '#0f172a',
+              800: '#1e293b',
+              700: '#334155'
+            },
+            sky: {
+              bright: '#38bdf8',
+              light: '#e0f2fe',
+              subtle: '#f0f9ff'
+            },
+            accent: {
+              blue: '#0284c7',
+              hover: '#0369a1'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="container navbar-container">
+      <a href="index.html" class="brand-logo" id="brandLogoLink">
+        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5-1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5-1.5zm1.5-5H6V8h12v4z"/></svg>
+        <span>RAILWAY ADMIN HQ</span>
+      </a>
+      <div class="nav-actions" id="navActions"></div>
+    </div>
+  </nav>
+
+  <div class="dashboard-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">Database Management</div>
+      <nav class="sidebar-nav">
+        <a href="admin-dashboard.html" class="sidebar-link"><span>ðŸ“Š Main Analytics</span></a>
+        <a href="manage-trains.html" class="sidebar-link"><span>ðŸš† Trains</span></a>
+        <a href="manage-coaches.html" class="sidebar-link"><span>ðŸšƒ Coaches</span></a>
+        <a href="manage-seats.html" class="sidebar-link"><span>ðŸ’º Seats</span></a>
+        <a href="manage-stations.html" class="sidebar-link"><span>ðŸš‰ Stations</span></a>
+        <a href="manage-platforms.html" class="sidebar-link"><span>ðŸ›¤ï¸ Platforms</span></a>
+        <a href="manage-routes.html" class="sidebar-link"><span>ðŸ—ºï¸ Routes</span></a>
+        <a href="manage-bookings.html" class="sidebar-link"><span>ðŸ“‘ Bookings</span></a>
+        <a href="manage-payments.html" class="sidebar-link active"><span>ðŸ’³ Payments</span></a>
+        <a href="manage-tickets.html" class="sidebar-link"><span>ðŸŽ« Tickets</span></a>
+        <a href="manage-cancellations.html" class="sidebar-link"><span>âŒ Cancellations</span></a>
+        <a href="manage-refunds.html" class="sidebar-link"><span>ðŸ’µ Refunds</span></a>
+        <a href="manage-complaints.html" class="sidebar-link"><span>ðŸ’¬ Complaints</span></a>
+        <a href="manage-lost-items.html" class="sidebar-link"><span>ðŸ§³ Lost Items</span></a>
+        <a href="manage-employees.html" class="sidebar-link"><span>ðŸ‘” Employees</span></a>
+      </nav>
+    </aside>
+
+    <main class="dashboard-main">
+      <div class="dashboard-header">
+        <div class="dashboard-title">
+          <h1>Payment Gateway Audit Logs</h1>
+          <p>Monitor online ticket transactions, payment methods, and settlement statuses</p>
+        </div>
+        <button id="addNewRecordBtn" class="btn btn-primary">+ Record Payment</button>
+      </div>
+
+      <div class="table-toolbar">
+        <div class="toolbar-search">
+          <span class="search-icon">ðŸ”</span>
+          <input type="text" id="crudSearchInput" class="form-control" placeholder="Search payments by passenger or method...">
+        </div>
+        <div class="toolbar-filters">
+          <select id="crudSortSelect" class="form-select" style="width: auto;">
+            <option value="desc">Sort Newest First</option>
+            <option value="asc">Sort Oldest First</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Passenger Name</th>
+              <th>Total Amount</th>
+              <th>Payment Method</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="crudTableBody">
+            <!-- Injected by dashboard.js -->
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="crudModalOverlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 class="modal-title" id="crudModalTitle">Add Payment Record</h3>
+        <button class="modal-close" id="closeCrudModalBtn">&times;</button>
+      </div>
+      <form id="crudModalForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Passenger Name</label>
+            <input type="text" name="passengerName" class="form-control" placeholder="Rahim Ahmed" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Amount (BDT)</label>
+            <input type="number" name="grandTotal" class="form-control" placeholder="1385" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Payment Method</label>
+            <select name="paymentMethod" class="form-select" required>
+              <option value="bKash">bKash</option>
+              <option value="Nagad">Nagad</option>
+              <option value="Credit Card">Credit Card</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select name="paymentStatus" class="form-select" required>
+              <option value="Paid">Paid</option>
+              <option value="Pending">Pending</option>
+              <option value="Failed">Failed</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" onclick="document.getElementById('crudModalOverlay').classList.remove('active')" class="btn btn-outline">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Payment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/main.js"></script>
+  <script src="js/dashboard.js"></script>`r`n    <script src="js/dashboard_db.js"></script>
+</body>
+</html>
+

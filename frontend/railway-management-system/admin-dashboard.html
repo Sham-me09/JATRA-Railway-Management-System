@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - JATRA: RAILWAY MANAGEMENT SYSTEM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: { 900: '#0f172a', 800: '#1e293b', 700: '#334155' },
+            sky:  { bright: '#38bdf8', light: '#e0f2fe', subtle: '#f0f9ff' },
+            accent: { blue: '#0284c7', hover: '#0369a1' }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container navbar-container">
+      <a href="index.html" class="brand-logo" id="brandLogoLink">
+        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-5H6V8h12v4z"/></svg>
+        <span>RAILWAY ADMIN HQ</span>
+      </a>
+      <div class="nav-actions" id="navActions"></div>
+    </div>
+  </nav>
+
+  <div class="dashboard-container">
+    <!-- Admin Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">Database Management</div>
+      <nav class="sidebar-nav">
+        <a href="admin-dashboard.html" class="sidebar-link active"><span>Main Analytics</span></a>
+        <a href="manage-trains.html" class="sidebar-link"><span>Trains</span></a>
+        <a href="manage-coaches.html" class="sidebar-link"><span>Coaches</span></a>
+        <a href="manage-seats.html" class="sidebar-link"><span>Seats</span></a>
+        <a href="manage-stations.html" class="sidebar-link"><span>Stations</span></a>
+        <a href="manage-platforms.html" class="sidebar-link"><span>Platforms</span></a>
+        <a href="manage-routes.html" class="sidebar-link"><span>🗺️ Routes</span></a>
+        <a href="manage-bookings.html" class="sidebar-link"><span>Bookings</span></a>
+        <a href="manage-payments.html" class="sidebar-link"><span>Payments</span></a>
+        <a href="manage-tickets.html" class="sidebar-link"><span>Tickets</span></a>
+        <a href="manage-cancellations.html" class="sidebar-link"><span>Cancellations</span></a>
+        <a href="manage-refunds.html" class="sidebar-link"><span>Refunds</span></a>
+        <a href="manage-complaints.html" class="sidebar-link"><span>Complaints</span></a>
+        <a href="manage-lost-items.html" class="sidebar-link"><span>Lost Items</span></a>
+        <a href="manage-employees.html" class="sidebar-link"><span>Employees</span></a>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="dashboard-main">
+      <div class="dashboard-header">
+        <div class="dashboard-title">
+          <h1>Railway Control Center &amp; Analytics</h1>
+          <p>Real-time system statistics, ticket revenue, and operational database metrics</p>
+        </div>
+      </div>
+
+      <!-- Quick Jump Ribbon -->
+      <div class="flex flex-wrap gap-2.5 mb-6 p-2 bg-slate-800/90 border border-slate-700/80 rounded-2xl shadow-lg">
+        <a href="#admin-emergency-section" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-400/30 transition-all flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+          Emergency Incidents (Live)
+        </a>
+        <a href="#admin-train-status-section" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-400/30 transition-all flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-5H6V8h12v4z"/></svg>
+          Train Status Operations
+        </a>
+        <a href="#admin-ticket-cancel-section" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-sky-500/20 text-sky-300 hover:bg-sky-500/30 border border-sky-400/30 transition-all flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 100 4v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2a2 2 0 100-4V6z"/></svg>
+          Ticket &amp; Cancellations
+        </a>
+        <a href="#admin-complaints-section" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-400/30 transition-all flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd"/></svg>
+          Complaints Management
+        </a>
+        <a href="#admin-lost-items-section" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-400/30 transition-all flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+          Lost Item Management
+        </a>
+      </div>
+
+      <!-- ===== ADMIN ROLE DASHBOARD CARDS ===== -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+
+        <!-- Card 1: View Emergencies (Read-Only) -->
+        <a href="#admin-emergency-section"
+          class="block bg-gradient-to-br from-rose-950/60 to-slate-800/90 border-2 border-rose-500/50 hover:border-rose-400/80 rounded-2xl p-5 shadow-xl transition-all group no-underline">
+          <div class="flex items-start gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-rose-500/20 border border-rose-400/40 flex items-center justify-center shrink-0 shadow-inner">
+              <svg class="w-7 h-7 text-rose-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+            </div>
+            <div class="flex-1">
+              <div class="flex flex-wrap items-center gap-2 mb-1.5">
+                <h3 class="text-base font-extrabold text-white" style="margin:0;">View Emergencies</h3>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white uppercase tracking-wider">Emergency Reports Only</span>
+              </div>
+              <p class="text-rose-200/70 text-xs mb-3 leading-relaxed">Live incident reports dispatched by Train Managers en route. Monitor, acknowledge, and resolve active emergency alerts from the central control feed.</p>
+              <div class="flex items-center gap-2.5">
+                <span id="adminCardEmergCount" class="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/40">0 Active</span>
+                <span class="text-xs text-rose-300/60 group-hover:text-rose-300 transition-colors font-semibold">Jump to Emergency Feed &darr;</span>
+              </div>
+            </div>
+          </div>
+        </a>
+
+        <!-- Card 2: Train Status Update -->
+        <a href="#admin-train-status-section"
+          class="block bg-gradient-to-br from-sky-950/60 to-slate-800/90 border-2 border-sky-500/50 hover:border-sky-400/80 rounded-2xl p-5 shadow-xl transition-all group no-underline">
+          <div class="flex items-start gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center shrink-0 shadow-inner">
+              <svg class="w-7 h-7 text-sky-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-5H6V8h12v4z"/></svg>
+            </div>
+            <div class="flex-1">
+              <div class="flex flex-wrap items-center gap-2 mb-1.5">
+                <h3 class="text-base font-extrabold text-white" style="margin:0;">Train Status Update</h3>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-400/30">System Control</span>
+              </div>
+              <p class="text-sky-200/70 text-xs mb-3 leading-relaxed">Update operational status, broadcast delays, and synchronize real-time passenger notifications across the entire active fleet.</p>
+              <div class="flex items-center gap-2.5">
+                <span id="adminCardTrainCount" class="px-2.5 py-1 text-xs font-bold rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/40">Fleet</span>
+                <span class="text-xs text-sky-300/60 group-hover:text-sky-300 transition-colors font-semibold">Manage Fleet Status &darr;</span>
+              </div>
+            </div>
+          </div>
+        </a>
+
+      </div>
+      <!-- ===== END ADMIN ROLE DASHBOARD CARDS ===== -->
+
+      <!-- Metrics Grid -->
+      <div class="metrics-grid">
+        <div class="metric-card"><div class="metric-info"><h3>Total Users</h3><div class="metric-value" id="admTotalUsers">0</div></div><div class="metric-icon">&#128101;</div></div>
+        <div class="metric-card"><div class="metric-info"><h3>Active Trains</h3><div class="metric-value" id="admTotalTrains">0</div></div><div class="metric-icon">&#128646;</div></div>
+        <div class="metric-card border border-rose-500/40 bg-rose-950/20"><div class="metric-info"><h3 class="text-rose-300">Active Emergencies</h3><div class="metric-value text-rose-400 font-black" id="admActiveEmergencies">0</div></div><div class="metric-icon">&#9888;&#65039;</div></div>
+        <div class="metric-card"><div class="metric-info"><h3>Total Bookings</h3><div class="metric-value" id="admTotalBookings">0</div></div><div class="metric-icon">&#128209;</div></div>
+        <div class="metric-card"><div class="metric-info"><h3>Total Revenue</h3><div class="metric-value" id="admTotalRevenue">&#2547;0</div></div><div class="metric-icon">&#128176;</div></div>
+        <div class="metric-card"><div class="metric-info"><h3>Pending Complaints</h3><div class="metric-value" id="admPendingComplaints">0</div></div><div class="metric-icon">&#9888;&#65039;</div></div>
+        <div class="metric-card"><div class="metric-info"><h3>Cancellations</h3><div class="metric-value" id="admPendingCancellations">0</div></div><div class="metric-icon">&#10060;</div></div>
+      </div>
+
+      <!-- Emergency & Incident Control Center -->
+      <div id="admin-emergency-section" class="card mb-6 border border-rose-500/40 bg-slate-800/95 shadow-xl rounded-2xl overflow-hidden">
+        <div class="card-header flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-rose-950/40 border-b border-rose-500/30 p-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-rose-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+              <h3 class="text-base font-bold text-white">Emergency &amp; Incident Reports (Live Feed)</h3>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white uppercase tracking-wider">Emergency Only Shown</span>
+            </div>
+            <p class="text-xs text-rose-200/70 mt-0.5">Central live monitoring of incidents dispatched by Train Managers en route. Control triage and response status.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="admEmergenciesCountBadge" class="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/40">0 Active</span>
+            <button onclick="renderAdminEmergenciesTable()" class="btn btn-outline btn-sm text-xs py-1 px-2.5 text-slate-300 border-slate-600 hover:text-white" title="Refresh Live Feed">Refresh</button>
+          </div>
+        </div>
+        <!-- Filter Tabs -->
+        <div class="p-4 border-b border-slate-700/80 flex flex-wrap gap-2 items-center justify-between bg-slate-900/40">
+          <div class="flex flex-wrap gap-1.5" id="admEmergFilterBtns">
+            <button onclick="filterAdminEmergencies('all')" class="px-3 py-1 rounded-lg text-xs font-bold bg-slate-700 text-white hover:bg-slate-600 transition-all cursor-pointer">All Incidents</button>
+            <button onclick="filterAdminEmergencies('Active')" class="px-3 py-1 rounded-lg text-xs font-bold bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 border border-rose-500/30 transition-all cursor-pointer">Active / Critical</button>
+            <button onclick="filterAdminEmergencies('Acknowledged')" class="px-3 py-1 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30 transition-all cursor-pointer">Acknowledged</button>
+            <button onclick="filterAdminEmergencies('Resolved')" class="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30 transition-all cursor-pointer">Resolved</button>
+          </div>
+          <span class="text-[11px] text-slate-400 italic">Dispatched via Train Manager terminal</span>
+        </div>
+        <div class="table-responsive p-4 pt-2">
+          <table class="table text-xs w-full">
+            <thead>
+              <tr class="text-slate-400 border-b border-slate-700">
+                <th>Incident ID</th><th>Train Details</th><th>Emergency Nature</th><th>Severity</th><th>Location / Post</th><th>Reported By &amp; Time</th><th>Description</th><th>Status</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admEmergenciesTableBody"><!-- Injected by dashboard.js --></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Train Status Management -->
+      <div id="admin-train-status-section" class="card mb-6 border border-sky-500/40 bg-slate-800/95 shadow-xl rounded-2xl overflow-hidden">
+        <div class="card-header flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-sky-950/40 border-b border-sky-500/30 p-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-sky-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-5H6V8h12v4z"/></svg>
+              <h3 class="text-base font-bold text-white">Train Status Management &amp; Fleet Operations</h3>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-400/30">System Control</span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">Admin fleet dispatch: Update train operational status, broadcast delays, and synchronize real-time passenger notices.</p>
+          </div>
+          <a href="manage-trains.html" class="btn btn-outline btn-sm">Full Fleet Directory</a>
+        </div>
+        <div class="table-responsive p-4">
+          <table class="table text-xs w-full">
+            <thead>
+              <tr class="text-slate-400 border-b border-slate-700">
+                <th>Train ID</th><th>Train Name &amp; Type</th><th>Route</th><th>Departure / Arrival</th><th>Delay Status</th><th>Operational Status</th><th class="text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="admTrainStatusTableBody"><!-- Injected by dashboard.js --></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Ticket & Cancellation Management -->
+      <div id="admin-ticket-cancel-section" class="card mb-6">
+        <div class="card-header flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2">Ticket &amp; Cancellation Management</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Review passenger ticket issuance, verify bookings, and authorize cancellation refunds</p>
+          </div>
+          <div class="flex gap-2">
+            <a href="manage-tickets.html" class="btn btn-outline btn-sm">Manage Tickets</a>
+            <a href="manage-cancellations.html" class="btn btn-danger btn-sm">Manage Cancellations</a>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 p-4">
+          <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/70">
+            <div class="flex justify-between items-center mb-3">
+              <h4 class="text-sm font-bold text-sky-400">Live Ticket Reservations</h4>
+              <span class="text-xs text-slate-400 font-mono" id="admActiveTicketsCountBadge">Loading...</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table text-xs">
+                <thead><tr><th>Ticket ID</th><th>Passenger</th><th>Train</th><th>Amount</th><th>Status</th></tr></thead>
+                <tbody id="admTicketsTableBody"><!-- Injected by dashboard.js --></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/70">
+            <div class="flex justify-between items-center mb-3">
+              <h4 class="text-sm font-bold text-rose-400">Cancellation &amp; Refund Requests</h4>
+              <span class="text-xs text-slate-400 font-mono" id="admCancellationsCountBadge">Loading...</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table text-xs">
+                <thead><tr><th>Cancel ID</th><th>Ticket</th><th>Reason</th><th>Refund</th><th>Action</th></tr></thead>
+                <tbody id="admCancellationsTableBody"><!-- Injected by dashboard.js --></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Complaints Management -->
+      <div id="admin-complaints-section" class="card mb-6">
+        <div class="card-header flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <h3 class="text-base font-bold text-white">Complaints Management</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Passenger grievance triage, on-train service complaints, and resolution tracking</p>
+          </div>
+          <a href="manage-complaints.html" class="btn btn-outline btn-sm">Manage All Complaints</a>
+        </div>
+        <div class="table-responsive p-4">
+          <table class="table text-xs">
+            <thead><tr><th>Complaint ID</th><th>Passenger</th><th>Train / Station</th><th>Issue Description</th><th>Status</th><th>Quick Actions</th></tr></thead>
+            <tbody id="admComplaintsTableBody"><!-- Injected by dashboard.js --></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Lost Item Management -->
+      <div id="admin-lost-items-section" class="card mb-6">
+        <div class="card-header flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <h3 class="text-base font-bold text-white">Lost Item Management</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Central Lost &amp; Found repository, recovered passenger property, and claim verification</p>
+          </div>
+          <a href="manage-lost-items.html" class="btn btn-outline btn-sm">Manage All Lost Items</a>
+        </div>
+        <div class="table-responsive p-4">
+          <table class="table text-xs">
+            <thead><tr><th>Item ID</th><th>Item Details</th><th>Found Location / Train</th><th>Date Reported</th><th>Description</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="admLostItemsTableBody"><!-- Injected by dashboard.js --></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Recent System Bookings -->
+      <div class="card">
+        <div class="card-header">
+          <h3 style="margin:0;">Recent System Bookings</h3>
+          <a href="manage-bookings.html" class="btn btn-outline btn-sm">Manage All Bookings</a>
+        </div>
+        <div class="table-responsive">
+          <table class="table">
+            <thead><tr><th>Booking ID</th><th>Passenger Name</th><th>Train Name</th><th>Route</th><th>Amount</th><th>Status</th></tr></thead>
+            <tbody id="admRecentBookingsTable"><!-- Injected by dashboard.js --></tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Admin Train Status Update Modal -->
+  <div class="modal-overlay" id="admTrainStatusModalOverlay">
+    <div class="modal-container max-w-md bg-slate-800 text-white border border-slate-700 rounded-2xl p-6 shadow-2xl">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-700 mb-4">
+        <h3 class="text-base font-bold text-white">Update Train Status &amp; Operations</h3>
+        <button type="button" onclick="closeAdminTrainStatusModal()" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer">&times;</button>
+      </div>
+      <form id="admTrainStatusForm" class="space-y-4 text-xs">
+        <input type="hidden" id="admStatusTrainId">
+        <div><label class="block text-slate-300 font-bold mb-1">Target Train</label><input type="text" id="admStatusTrainName" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sky-400 font-bold" readonly></div>
+        <div>
+          <label class="block text-slate-300 font-bold mb-1">Operational State</label>
+          <select id="admStatusSelect" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-bold focus:ring-2 focus:ring-sky-500 focus:outline-none">
+            <option value="Operational">Operational (On Schedule)</option>
+            <option value="Ready for Boarding">Ready for Boarding</option>
+            <option value="Boarding in Progress">Boarding in Progress</option>
+            <option value="In Transit">In Transit (En Route)</option>
+            <option value="Arrived at Station">Arrived at Station</option>
+            <option value="Delayed">Delayed / Holding</option>
+            <option value="Under Maintenance">Under Maintenance</option>
+            <option value="Cancelled">Service Cancelled</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-slate-300 font-bold mb-1">Delay (Minutes)</label><input type="number" id="admStatusDelayMins" min="0" max="360" value="0" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"></div>
+          <div>
+            <label class="block text-slate-300 font-bold mb-1">Delay Reason</label>
+            <select id="admStatusDelayReason" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
+              <option value="On Time / No Delay">None (On Time)</option>
+              <option value="Signal Congestion">Signal Congestion</option>
+              <option value="Track Maintenance Work">Track Maintenance</option>
+              <option value="Severe Weather">Severe Weather</option>
+              <option value="Locomotive Inspection">Locomotive Inspection</option>
+              <option value="Single Line Waiting">Single Line Crossing</option>
+            </select>
+          </div>
+        </div>
+        <div><label class="block text-slate-300 font-bold mb-1">Admin Directive / Dispatch Note</label><input type="text" id="admStatusNote" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:outline-none" placeholder="e.g. Priority departure cleared by Central Control HQ"></div>
+        <div class="mt-4 pt-3 border-t border-slate-700 flex justify-end gap-2">
+          <button type="button" onclick="closeAdminTrainStatusModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-xl transition-all cursor-pointer">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer">Publish Train Status Update</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/main.js"></script>
+  <script src="js/dashboard.js"></script>    <script src="js/dashboard_db.js"></script>
+</body>
+</html>
+
+
+

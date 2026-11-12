@@ -1,0 +1,3436 @@
+﻿/**
+ * Generic Admin & User Dashboard Engine
+ * Implements CRUD Data Tables, Search, Filter, Sort, Pagination & Modals for all 15 Admin Pages
+ */
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Page Identifier Router
+  const pagePath = window.location.pathname.split('/').pop();
+
+  if (pagePath === 'user-dashboard.html') {
+    renderUserDashboard();
+  } else if (pagePath === 'train-manager-dashboard.html') {
+    initTrainManagerDashboard();
+  } else if (pagePath === 'profile.html') {
+    renderProfilePage();
+  } else if (pagePath === 'admin-dashboard.html') {
+    renderAdminDashboard();
+  } else if (pagePath === 'my-tickets.html') {
+    renderMyTicketsPage();
+  } else if (pagePath === 'cancellation.html') {
+    renderCancellationPage();
+  } else if (pagePath === 'refund.html') {
+    renderRefundPage();
+  } else if (pagePath === 'complaint.html') {
+    renderComplaintPage();
+  } else if (pagePath === 'lost-item.html') {
+    renderLostItemPage();
+  } else if (pagePath.startsWith('manage-')) {
+    if (typeof initDatabaseCrudPage === 'function') {
+        initDatabaseCrudPage(pagePath);
+    } else {
+        if (pagePath !== 'manage-lost-items.html' && pagePath !== 'manage-platforms.html') {
+            initAdminCrudTable(pagePath);
+        }
+    }
+ }
+});
+
+/* ==========================================================================
+   1. USER DASHBOARD (SEARCH & BOOK + PERSISTENT MY TICKETS)
+   ========================================================================== */
+function renderUserDashboard() {
+  const currentUser = getCurrentUser();
+  if (!currentUser) {
+    window.location.href = 'login.html';
+    return;
+  }
+
+  // Profile Info
+  const nameEl = document.getElementById('dashUserName');
+  const emailEl = document.getElementById('dashUserEmail');
+  const phoneEl = document.getElementById('dashUserPhone');
+  if (nameEl) nameEl.textContent = currentUser.name || 'Passenger';
+  if (emailEl) emailEl.textContent = currentUser.email || 'user@railway.com';
+  if (phoneEl) phoneEl.textContent = currentUser.phone || '01711223344';
+
+  // Stats
+  const tickets = JSON.parse(localStorage.getItem('tickets') || '[]');
+  const myTickets = tickets.filter(t => t.userId === currentUser.id || t.passengerPhone === currentUser.phone || t.userId === 'USR-1001');
+
+  const activeTicketsCount = myTickets.filter(t => t.bookingStatus === 'Confirmed').length;
+  const totalSpent = myTickets.reduce((acc, t) => acc + (t.grandTotal || 0), 0);
+
+  const activeEl = document.getElementById('userActiveTickets');
+  const spentEl = document.getElementById('userTotalSpent');
+  if (activeEl) activeEl.textContent = activeTicketsCount;
+  if (spentEl) spentEl.textContent = formatBDT(totalSpent);
+
+  // Lost Item Claims Count
+  const allLost = JSON.parse(localStorage.getItem('lostItems') || '[]');
+  const myLost = allLost.filter(l => l.userId === currentUser.id || l.phone === currentUser.phone || (!l.userId && currentUser.id === 'USR-1001'));
+  const lostCountEl = document.getElementById('userLostItemsCount');
+  if (lostCountEl) lostCountEl.textContent = myLost.length;
+
+  // Real-Time Delay Notification Banner for Booked Passenger Trains
+  renderPassengerDelayAlertBanner('passengerDelayAlertContainer');
+
+  // Show appropriate placeholder in the delay notifications section
+  // based on whether the passenger has bookings and whether any are delayed
+  (function updateDelayNotificationPlaceholders() {
+    const noDelayEl = document.getElementById('passengerNoDelayPlaceholder');
+    const noBookingEl = document.getElementById('passengerNoBookingPlaceholder');
+    if (!noDelayEl && !noBookingEl) return;
+
+    const allTickets = JSON.parse(localStorage.getItem('tickets') || '[]');
+    const myActiveTickets = allTickets.filter(t =>
+      (t.userId === currentUser.id || t.passengerPhone === currentUser.phone || t.userId === 'USR-1001') &&
+      t.bookingStatus === 'Confirmed'
+    );
+
+    // Mirror delay check logic from getPassengerDelayAlerts() in main.js
+    const allTrains = JSON.parse(localStorage.getItem('trains') || '[]');
+    const dismissed = JSON.parse(sessionStorage.getItem('dismissed_delay_alerts') || '[]');
+    const hasActiveDelays = myActiveTickets.some(t => {
+      if (dismissed.includes(t.ticketId || t.id)) return false;
+      const matchedTrain = allTrains.find(tr => tr.id === t.trainId || tr.name === t.trainName);
+      const delayMins = (matchedTrain ? matchedTrain.delayMinutes : 0) || t.delayMinutes || 0;
+      return delayMins > 0;
+    });
+
+    if (noBookingEl) noBookingEl.style.display = (myActiveTickets.length === 0) ? 'block' : 'none';
+    if (noDelayEl) noDelayEl.style.display = (myActiveTickets.length > 0 && !hasActiveDelays) ? 'block' : 'none';
+  })();
+
+  // 1. Search & Book Ticket Section Engine
+  const fromSelect = document.getElementById('dashSearchFrom');
+  const toSelect = document.getElementById('dashSearchTo');
+  const dateInput = document.getElementById('dashSearchDate');
+  const searchForm = document.getElementById('dashTrainSearchForm');
+  const resultsContainer = document.getElementById('dashSearchResultsContainer');
+  const resultsList = document.getElementById('dashTrainResultsList');
+  const resultsCountBadge = document.getElementById('dashResultsCountBadge');
+
+  const stations = JSON.parse(localStorage.getItem('stations') || '[]');
+  const defaultStationList = [
+    { name: 'Dhaka (Kamalapur)' },
+    { name: 'Dhaka Airport' },
+    { name: 'Chattogram Junction' },
+    { name: 'Cox\'s Bazar Station' },
+    { name: 'Sylhet Station' },
+    { name: 'Rajshahi Station' },
+    { name: 'Khulna Station' },
+    { name: 'Cumilla Station' },
+    { name: 'Bhairab Bazar' },
+    { name: 'Feni Junction' }
+  ];
+  const stationOptions = (stations.length > 0 ? stations : defaultStationList);
+
+  if (fromSelect && toSelect) {
+    const fromHtml = stationOptions.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+    const toHtml = [...stationOptions].reverse().map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+    
+    fromSelect.innerHTML = fromHtml;
+    toSelect.innerHTML = toHtml;
+    
+    // Set default distinct selections
+    fromSelect.value = 'Dhaka (Kamalapur)';
+    toSelect.value = 'Chattogram Junction';
+  }
+
+  if (dateInput) {
+    const today = new Date().toISOString().split('T')[0];
+    dateInput.value = today;
+    dateInput.min = today;
+  }
+
+  function renderTrainSearchResults(sourceQuery = '', destQuery = '') {
+    if (!resultsList) return;
+    const allTrains = JSON.parse(localStorage.getItem('trains') || '[]');
+    
+    let matchedTrains = allTrains;
+    if (sourceQuery && destQuery && sourceQuery !== destQuery) {
+      const srcTerm = sourceQuery.split(' ')[0].toLowerCase();
+      const dstTerm = destQuery.split(' ')[0].toLowerCase();
+      
+      matchedTrains = allTrains.filter(t => {
+        const tSrc = (t.source || '').toLowerCase();
+        const tDst = (t.destination || '').toLowerCase();
+        return (tSrc.includes(srcTerm) && tDst.includes(dstTerm)) ||
+               (tSrc.includes(srcTerm) && !destQuery) ||
+               (tDst.includes(dstTerm) && !sourceQuery);
+      });
+    }
+
+    if (matchedTrains.length === 0) {
+      matchedTrains = allTrains.slice(0, 4); // Show top intercity trains if specific route has no direct train
+    }
+
+    if (resultsCountBadge) {
+      resultsCountBadge.textContent = `${matchedTrains.length} Trains Available`;
+    }
+
+    resultsList.innerHTML = matchedTrains.map(t => {
+      const availSeats = t.availableSeats !== undefined ? t.availableSeats : Math.floor(40 + Math.random() * 80);
+      const fare = t.fare || 650;
+      const duration = t.duration || '5h 15m';
+      const dept = t.departure || '07:00 AM';
+      const arr = t.arrival || '12:15 PM';
+
+      return `
+        <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl hover:shadow-md transition-all">
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="text-sm font-bold text-slate-800" style="margin: 0;">${t.name}</h4>
+                <span class="badge badge-navy text-[10px] font-mono">${t.id}</span>
+                <span class="badge ${t.status === 'Operational' ? 'badge-success' : 'badge-warning'} text-[10px]">${t.status || 'Operational'}</span>
+              </div>
+              <div class="text-xs text-slate-600 mt-1 flex flex-wrap items-center gap-3">
+                <span>?? <strong>${dept}</strong> (${t.source})</span>
+                <span>?</span>
+                <span>?? <strong>${arr}</strong> (${t.destination})</span>
+                <span class="text-slate-400">Time ?? ${duration}</span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end pt-2 md:pt-0 border-t md:border-t-0 border-slate-200">
+              <div class="text-right">
+                <div class="text-xs text-emerald-600 font-bold">? ${availSeats} Seats Available</div>
+                <div class="text-sm font-black text-slate-900">${formatBDT(fare)} <span class="text-[10px] font-normal text-slate-500">/ person</span></div>
+              </div>
+              <button type="button" onclick="startBooking('${t.id}')" class="btn btn-primary btn-sm px-4 py-2 font-bold cursor-pointer shadow-sm">
+                Book Now ?
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Initial render of available trains
+  renderTrainSearchResults('Dhaka (Kamalapur)', 'Chattogram Junction');
+
+  if (searchForm && !searchForm.dataset.bound) {
+    searchForm.dataset.bound = 'true';
+    searchForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fromVal = fromSelect ? fromSelect.value : '';
+      const toVal = toSelect ? toSelect.value : '';
+      const dateVal = dateInput ? dateInput.value : '';
+      const passVal = document.getElementById('dashSearchPassengers')?.value || '1';
+
+      if (fromVal === toVal) {
+        showToast('Origin and Destination stations cannot be the same.', 'warning');
+        return;
+      }
+
+      showToast(`Searching trains from ${fromVal} to ${toVal}...`, 'info');
+      renderTrainSearchResults(fromVal, toVal);
+    });
+  }
+
+  // 2. Persistent MY TICKETS Card Rendering
+  renderPersistentMyTickets();
+
+  function renderPersistentMyTickets() {
+    const ticketsContainer = document.getElementById('dashMyTicketsContainer');
+    const badgeCount = document.getElementById('myTicketsCountBadge');
+    if (!ticketsContainer) return;
+
+    const allTickets = JSON.parse(localStorage.getItem('tickets') || '[]');
+    const userTickets = allTickets.filter(t => t.userId === currentUser.id || t.passengerPhone === currentUser.phone || t.userId === 'USR-1001');
+
+    if (badgeCount) {
+      badgeCount.textContent = `${userTickets.length} Ticket${userTickets.length === 1 ? '' : 's'}`;
+    }
+
+    if (userTickets.length === 0) {
+      ticketsContainer.innerHTML = `
+        <div class="text-center py-8 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+          <div class="text-3xl mb-2">???</div>
+          <h3 class="text-sm font-bold text-slate-700">No tickets yet</h3>
+          <p class="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">You haven't booked any train journeys yet. Use the search tool above to book your seats across Bangladesh.</p>
+          <button onclick="document.getElementById('searchBookTicketSection').scrollIntoView({behavior: 'smooth'})" class="btn btn-primary btn-sm px-4 py-1.5 font-bold">
+            ?? Search & Book Ticket
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    ticketsContainer.innerHTML = `
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Ticket ID</th>
+              <th>Train Name</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Journey Date</th>
+              <th>Coach & Seats</th>
+              <th>Status</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${userTickets.map(t => {
+              const seatDisplay = Array.isArray(t.seats) ? t.seats.join(', ') : (t.seats || 'N/A');
+              const ticketId = t.ticketId || t.id;
+              const isConfirmed = (t.bookingStatus === 'Confirmed');
+
+              const allTrains = JSON.parse(localStorage.getItem('trains') || '[]');
+              const matchedTrain = allTrains.find(tr => tr.id === t.trainId || tr.name === t.trainName);
+              const delayMins = (matchedTrain ? matchedTrain.delayMinutes : t.delayMinutes) || t.delayMinutes || 0;
+              const isDelayed = delayMins > 0;
+
+              return `
+                <tr>
+                  <td><strong class="font-mono text-xs text-slate-800">${ticketId}</strong></td>
+                  <td>
+                    <div class="font-bold text-xs text-slate-900">${t.trainName}</div>
+                    <div class="text-[11px] text-slate-500">${formatBDT(t.grandTotal || t.totalFare || 650)}</div>
+                    ${isDelayed ? `
+                      <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-500 text-slate-950 mt-1">
+                        ?  +${delayMins}m Delayed
+                      </span>
+                    ` : ''}
+                  </td>
+                  <td class="text-xs">
+                    <div>${t.source}</div>
+                    ${isDelayed ? `<div class="text-[10px] text-amber-700 font-bold">Dept: ${calculateRevisedTime(matchedTrain?.departure || '07:00 AM', delayMins)}</div>` : ''}
+                  </td>
+                  <td class="text-xs">${t.destination}</td>
+                  <td class="text-xs font-semibold text-slate-700">${t.journeyDate || 'Today'}</td>
+                  <td>
+                    <span class="inline-block px-2 py-0.5 text-xs font-bold bg-sky-50 text-sky-700 rounded border border-sky-200">
+                      ${t.coach || 'Coach KA'} | ${seatDisplay}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="badge ${isConfirmed ? 'badge-success' : 'badge-danger'} text-[11px]">
+                      ${t.bookingStatus || 'Confirmed'}
+                    </span>
+                  </td>
+                  <td class="text-right whitespace-nowrap">
+                    <button onclick="viewTicketModal('${t.id || ticketId}')" class="btn btn-outline btn-sm py-1 px-2.5 text-xs font-semibold" title="View Boarding Pass">
+                      View View
+                    </button>
+                    <button onclick="downloadTicket('${t.id || ticketId}')" class="btn btn-primary btn-sm py-1 px-2.5 text-xs font-semibold ml-1" title="Download & Print Ticket">
+                      Print¨ Print
+                    </button>
+                    ${isConfirmed ? `
+                      <button onclick="initiateCancellation('${ticketId}')" class="btn btn-danger btn-sm py-1 px-2.5 text-xs font-semibold ml-1" title="Cancel Ticket">
+                        ? Cancel
+                      </button>
+                    ` : ''}
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+}
+
+/* ==========================================================================
+   2. MY TICKETS PAGE
+   ========================================================================== */
+async function renderMyTicketsPage() {
+  const currentUser = getCurrentUser() || { id: 'USR-1001', phone: '01711223344' };
+  const container = document.getElementById('myTicketsContainer');
+  if (!container) return;
+
+  // -- Load delay alerts from API --------------------------------------------
+  let delayMap = {};  // ticketId ? delay info
+  const delayResult = await apiCall('GET', '/api/notifications/delays');
+  if (delayResult.ok && delayResult.data && Array.isArray(delayResult.data.delays)) {
+    delayResult.data.delays.forEach(d => {
+      if (d.ticketId) delayMap[d.ticketId] = d;
+    });
+  }
+
+  // Render Real-Time Passenger Delay Notifications
+  renderPassengerDelayAlertBanner('passengerDelayAlertContainer');
+
+  // -- Load my bookings from API ---------------------------------------------
+  let myTickets = [];
+  const bookingResult = await apiCall('GET', '/api/bookings');
+  if (bookingResult.ok && bookingResult.data && Array.isArray(bookingResult.data.bookings)) {
+    myTickets = bookingResult.data.bookings;
+    // Merge into localStorage tickets cache so other pages still work
+    const localTickets = JSON.parse(localStorage.getItem('tickets') || '[]');
+    myTickets.forEach(apiTicket => {
+      const idx = localTickets.findIndex(t => t.id === apiTicket.id || t.ticketId === apiTicket.ticketId);
+      const merged = {
+        id: apiTicket.id,
+        ticketId: apiTicket.ticketId,
+        trainId: apiTicket.trainId,
+        trainName: apiTicket.trainName,
+        source: apiTicket.source,
+        destination: apiTicket.destination,
+        deptTime: apiTicket.deptTime,
+        arrTime: apiTicket.arrTime,
+        coach: apiTicket.coach,
+        seats: apiTicket.seatNumber ? [apiTicket.seatNumber] : [],
+        journeyDate: apiTicket.journeyDate,
+        bookingStatus: apiTicket.bookingStatus,
+        grandTotal: apiTicket.grandTotal,
+        paymentMethod: apiTicket.paymentMethod,
+        userId: currentUser.id,
+        delay: apiTicket.delay,
+      };
+      if (idx >= 0) localTickets[idx] = merged;
+      else localTickets.unshift(merged);
+    });
+    localStorage.setItem('tickets', JSON.stringify(localTickets));
+  } else {
+    // -- Fallback: localStorage ------------------------------------------------
+    console.warn('[DASHBOARD] API unavailable, using localStorage for my tickets.');
+    const tickets = JSON.parse(localStorage.getItem('tickets') || '[]');
+    myTickets = tickets.filter(t =>
+      t.userId === currentUser.id || t.passengerPhone === currentUser.phone || t.userId === 'USR-1001'
+    );
+  }
+
+  if (myTickets.length === 0) {
+    container.innerHTML = `
+      <div class="card text-center" style="padding: 3rem;">
+        <h3>No Tickets Found</h3>
+        <p>You have not booked any train tickets yet.</p>
+        <a href="search-train.html" class="btn btn-primary" style="margin-top: 1rem;">Book Train Ticket</a>
+      </div>
+    `;
+    return;
+  }
+
+  const allTrains = JSON.parse(localStorage.getItem('trains') || '[]');
+
+  container.innerHTML = myTickets.map(t => {
+    const matchedTrain = allTrains.find(tr => tr.id === t.trainId || tr.name === t.trainName);
+    // Check delay from API response first, then localStorage train, then ticket
+    const apiDelay = delayMap[t.ticketId] || delayMap[t.id];
+    const delayMins = apiDelay
+      ? parseInt((apiDelay.delay || '0').replace(/\D/g, '')) || 0
+      : ((matchedTrain ? matchedTrain.delayMinutes : t.delayMinutes) || t.delayMinutes || 0);
+    const delayReason = apiDelay
+      ? (apiDelay.delayReason || 'Operational delay')
+      : ((matchedTrain ? matchedTrain.delayReason : t.delayReason) || t.delayReason || 'Operational traffic / signaling buffer');
+    const isDelayed = delayMins > 0;
+
+    return `
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <span class="badge badge-navy">${t.ticketId || t.id}</span>
+            <strong style="font-size: 1.1rem; color: var(--primary-navy); margin-left: 0.5rem;">${t.trainName}</strong>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            ${isDelayed ? `<span class="badge badge-warning" style="font-weight: 800;">?  +${delayMins}m Delayed</span>` : ''}
+            <span class="badge ${t.bookingStatus === 'Confirmed' || t.bookingStatus === 'CONFIRMED' ? 'badge-success' : 'badge-danger'}">${t.bookingStatus}</span>
+          </div>
+        </div>
+
+        ${isDelayed ? `
+          <div style="background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+              <strong style="color: #b45309; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem;">
+                <span>? </span> PASSENGER TRAIN DELAY ALERT
+              </strong>
+              <span style="background: #d97706; color: #fff; font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 4px;">+${delayMins} Min Delay</span>
+            </div>
+            <p style="margin: 0; font-size: 0.8rem; color: #92400e;">
+              <strong>Cause:</strong> ${delayReason}
+            </p>
+            <p style="margin: 0.25rem 0 0 0; font-size: 0.8rem; color: #78350f;">
+              <strong>Scheduled Departure:</strong> ${t.deptTime || t.departureTime || matchedTrain?.departure || '07:00 AM'} &nbsp;|&nbsp; <strong>Revised Estimated Departure:</strong> <span style="font-weight: 800; color: #065f46;">${calculateRevisedTime(t.deptTime || t.departureTime || matchedTrain?.departure || '07:00 AM', delayMins)}</span>
+            </p>
+          </div>
+        ` : ''}
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Route</div>
+            <div style="font-weight: 600;">${t.source} ? ${t.destination}</div>
+          </div>
+          <div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Coach & Seats</div>
+            <div style="font-weight: 600; color: var(--accent-blue);">${t.coach || 'N/A'} | ${Array.isArray(t.seats) ? t.seats.join(', ') : (t.seatNumber || 'N/A')}</div>
+          </div>
+          <div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Journey Date</div>
+            <div style="font-weight: 600;">${t.journeyDate || 'Today'}</div>
+          </div>
+          <div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Total Paid</div>
+            <div style="font-weight: 700; color: var(--primary-navy);">${formatBDT(t.grandTotal)}</div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+          <button onclick="viewTicketModal('${t.id}')" class="btn btn-outline btn-sm">View Ticket Voucher</button>
+          ${(t.bookingStatus === 'Confirmed' || t.bookingStatus === 'CONFIRMED')
+            ? `<button onclick="initiateCancellation('${t.ticketId || t.id}')" class="btn btn-danger btn-sm">Cancel Ticket</button>`
+            : `<span style="font-size: 0.85rem; color: var(--text-muted); align-self: center;">Ticket Cancelled</span>`
+          }
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+
+function viewTicketModal(ticketId) {
+  const tickets = JSON.parse(localStorage.getItem('tickets') || '[]');
+  const t = tickets.find(item => item.id === ticketId || item.ticketId === ticketId);
+  if (!t) return;
+
+  localStorage.setItem('lastConfirmedTicket', JSON.stringify(t));
+  window.location.href = 'booking-confirmation.html';
+}
+
+function initiateCancellation(ticketId) {
+  localStorage.setItem('cancellingTicketId', ticketId);
+  window.location.href = 'cancellation.html';
+}
+
+function downloadTicket(ticketId) {
+  const tickets = JSON.parse(localStorage.getItem('tickets') || '[]');
+  const t = tickets.find(item => item.id === ticketId || item.ticketId === ticketId);
+  if (t) {
+    localStorage.setItem('lastConfirmedTicket', JSON.stringify(t));
+    window.location.href = 'booking-confirmation.html';
+  } else {
+    window.print();
+  }
+}
+
+function startBooking(trainId) {
+  localStorage.setItem('selectedTrainId', trainId);
+  window.location.href = 'seat-selection.html';
+}
+
+window.viewTicketModal = viewTicketModal;
+window.initiateCancellation = initiateCancellation;
+window.downloadTicket = downloadTicket;
+window.startBooking = startBooking;
+
+/* ==========================================================================
+   3. CANCELLATION, REFUND, COMPLAINT & LOST ITEM FORMS
+   ========================================================================== */
+function renderCancellationPage() {
+  const form = document.getElementById('cancellationForm');
+  const targetId = localStorage.getItem('cancellingTicketId');
+  if (targetId && document.getElementById('cancelTicketId')) {
+    document.getElementById('cancelTicketId').value = targetId;
+  }
+
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const ticketId = document.getElementById('cancelTicketId').value.trim();
+      const reason = document.getElementById('cancelReason').value.trim();
+
+      if (!ticketId || !reason) {
+        showToast('Please specify Ticket ID and reason.', 'danger');
+        return;
+      }
+
+      const submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Processing Cancellation...'; }
+
+      // -- Call real API ------------------------------------------------------
+      const res = await apiCall('POST', `/api/tickets/${encodeURIComponent(ticketId)}/cancel`, { reason });
+
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Confirm Cancellation'; }
+
+      if (res.ok && res.data) {
+        const { cancellation_id, refund_amount } = res.data;
+
+        // Update local state
+        const tickets = JSON.parse(localStorage.getItem('tickets') || '[]');
+        const ticket = tickets.find(t => t.ticketId === ticketId || t.id === ticketId);
+        if (ticket) {
+          ticket.bookingStatus = 'Cancelled';
+          localStorage.setItem('tickets', JSON.stringify(tickets));
+        }
+
+        const cancellations = JSON.parse(localStorage.getItem('cancellations') || '[]');
+        cancellations.unshift({
+          id: cancellation_id,
+          ticketId: ticketId,
+          reason: reason,
+          refundAmount: refund_amount,
+          status: 'Approved',
+          requestedAt: new Date().toISOString().split('T')[0]
+        });
+        localStorage.setItem('cancellations', JSON.stringify(cancellations));
+
+        const refunds = JSON.parse(localStorage.getItem('refunds') || '[]');
+        refunds.unshift({
+          id: `RFD-${Math.floor(200 + Math.random() * 800)}`,
+          cancellationId: cancellation_id,
+          amount: refund_amount,
+          status: 'Completed',
+          processedAt: new Date().toISOString().split('T')[0]
+        });
+        localStorage.setItem('refunds', JSON.stringify(refunds));
+
+        showToast(`Cancellation confirmed! Refund of ${formatBDT(refund_amount)} approved.`, 'success');
+        setTimeout(() => { window.location.href = 'refund.html'; }, 900);
+        return;
+      }
+
+      if (res.status === 404 || res.status === 409 || res.status === 403) {
+        showToast(res.error || 'Cancellation could not be processed.', 'danger');
+        return;
+      }
+
+      // Offline fallback
+      const tickets = JSON.parse(localStorage.getItem('tickets') || '[]');
+      const ticket = tickets.find(t => t.ticketId === ticketId || t.id === ticketId);
+      if (!ticket) {
+        showToast('Ticket ID not found in system records.', 'danger');
+        return;
+      }
+      ticket.bookingStatus = 'Cancelled';
+      localStorage.setItem('tickets', JSON.stringify(tickets));
+      const cncId = `CNC-${Math.floor(100 + Math.random() * 900)}`;
+      const refundAmt = Math.round((ticket.grandTotal || 650) * 0.85);
+      const cancellations = JSON.parse(localStorage.getItem('cancellations') || '[]');
+      cancellations.unshift({
+        id: cncId, ticketId, reason, refundAmount: refundAmt, status: 'Approved',
+        requestedAt: new Date().toISOString().split('T')[0]
+      });
+      localStorage.setItem('cancellations', JSON.stringify(cancellations));
+      const refunds = JSON.parse(localStorage.getItem('refunds') || '[]');
+      refunds.unshift({
+        id: `RFD-${Math.floor(200 + Math.random() * 800)}`, cancellationId: cncId, amount: refundAmt,
+        status: 'Completed', processedAt: new Date().toISOString().split('T')[0]
+      });
+      localStorage.setItem('refunds', JSON.stringify(refunds));
+      showToast(`Cancellation submitted! Refund of ${formatBDT(refundAmt)} approved. [Offline mode]`, 'success');
+      setTimeout(() => { window.location.href = 'refund.html'; }, 900);
+    });
+  }
+}
+
+function renderRefundPage() {
+  const container = document.getElementById('refundsListTable');
+  if (!container) return;
+
+  const refunds = JSON.parse(localStorage.getItem('refunds') || '[]');
+  if (refunds.length === 0) {
+    container.innerHTML = `<tr><td colspan="5" class="text-center">No refund records found.</td></tr>`;
+    return;
+  }
+
+  container.innerHTML = refunds.map(r => `
+    <tr>
+      <td><strong>${r.id}</strong></td>
+      <td>${r.cancellationId}</td>
+      <td><strong>${formatBDT(r.amount)}</strong></td>
+      <td><span class="badge badge-success">${r.status}</span></td>
+      <td>${r.processedAt}</td>
+    </tr>
+  `).join('');
+}
+
+function renderComplaintPage() {
+  const form = document.getElementById('complaintForm');
+  if (form) {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const category = document.getElementById('cmpCategory').value;
+      const train = document.getElementById('cmpTrain').value.trim();
+      const desc = document.getElementById('cmpDesc').value.trim();
+      const currentUser = getCurrentUser() || { name: 'Rahim Ahmed', id: 'USR-1001' };
+
+      if (!train || !desc) {
+        showToast('Please provide train name and complaint description.', 'danger');
+        return;
+      }
+
+      const complaints = JSON.parse(localStorage.getItem('complaints') || '[]');
+      const newCmp = {
+        id: `CMP-${Math.floor(500 + Math.random() * 500)}`,
+        userId: currentUser.id,
+        name: currentUser.name,
+        category: category,
+        train: train,
+        date: new Date().toISOString().split('T')[0],
+        description: desc,
+        status: 'Pending'
+      };
+
+      complaints.unshift(newCmp);
+      localStorage.setItem('complaints', JSON.stringify(complaints));
+
+      showToast('Complaint submitted successfully. Ticket ID generated.', 'success');
+      form.reset();
+      renderComplaintList();
+    });
+  }
+
+  renderComplaintList();
+}
+
+function renderComplaintList() {
+  const table = document.getElementById('complaintsListTable');
+  if (!table) return;
+
+  const complaints = JSON.parse(localStorage.getItem('complaints') || '[]');
+  table.innerHTML = complaints.map(c => `
+    <tr>
+      <td><strong>${c.id}</strong></td>
+      <td>${c.category}</td>
+      <td>${c.train}</td>
+      <td>${c.description}</td>
+      <td><span class="badge ${c.status === 'Resolved' ? 'badge-success' : 'badge-warning'}">${c.status}</span></td>
+    </tr>
+  `).join('');
+}
+
+function renderLostItemPage() {
+  const searchInput = document.getElementById('filterMyLostInput');
+
+  // Filter Buttons
+  const filterTabs = document.querySelectorAll('#lostStatusFilters button');
+  let currentFilter = 'all';
+  filterTabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterTabs.forEach(b => {
+        b.className = 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900';
+      });
+      btn.className = 'px-3 py-1.5 rounded-lg bg-white text-slate-800 shadow-sm font-bold';
+      currentFilter = btn.dataset.filter || 'all';
+      renderLostItemList(currentFilter, searchInput ? searchInput.value.trim() : '');
+    });
+  });
+
+  // Search input inside inquiries
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      renderLostItemList(currentFilter, e.target.value.trim());
+    });
+  }
+
+  renderLostItemList();
+}
+
+function renderLostItemList(activeFilter = 'all', searchQuery = '') {
+  const container = document.getElementById('myLostClaimsContainer');
+  const statTotal = document.getElementById('statMyTotalClaims');
+  const statReview = document.getElementById('statUnderReview');
+  const statFound = document.getElementById('statFoundReady');
+  const statResolved = document.getElementById('statResolvedCount');
+
+  const currentUser = getCurrentUser() || { id: 'USR-1001', phone: '01711223344' };
+  const allItems = JSON.parse(localStorage.getItem('lostItems') || '[]');
+  
+  // Filter items belonging to current user (or fallback to USR-1001)
+  const myItems = allItems.filter(l => l.userId === currentUser.id || l.phone === currentUser.phone || (!l.userId && currentUser.id === 'USR-1001') || currentUser.role === 'admin' || currentUser.role === 'station_master');
+
+  // Update quick stat counters
+  if (statTotal) statTotal.textContent = myItems.length;
+  if (statReview) {
+    const underReviewCount = myItems.filter(l => l.status === 'In Review' || l.status === 'Searching').length;
+    statReview.textContent = underReviewCount;
+  }
+  if (statFound) {
+    const foundCount = myItems.filter(l => l.status === 'Found & Verified' || l.status === 'In Security Storage').length;
+    statFound.textContent = foundCount;
+  }
+  if (statResolved) {
+    const resolvedCount = myItems.filter(l => l.status === 'Claimed by Owner' || l.status === 'Claimed' || l.status === 'Resolved').length;
+    statResolved.textContent = resolvedCount;
+  }
+
+  if (!container) return;
+
+  // Apply tab filter & search
+  let displayedItems = myItems;
+  if (activeFilter && activeFilter !== 'all') {
+    if (activeFilter === 'Claimed') {
+      displayedItems = displayedItems.filter(l => l.status === 'Claimed by Owner' || l.status === 'Claimed' || l.status === 'Resolved');
+    } else {
+      displayedItems = displayedItems.filter(l => (l.status || '').toLowerCase().includes(activeFilter.toLowerCase()));
+    }
+  }
+
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    displayedItems = displayedItems.filter(l => 
+      (l.item && l.item.toLowerCase().includes(q)) ||
+      (l.id && l.id.toLowerCase().includes(q)) ||
+      (l.train && l.train.toLowerCase().includes(q)) ||
+      (l.description && l.description.toLowerCase().includes(q))
+    );
+  }
+
+  if (displayedItems.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-12 px-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+        <div class="text-4xl mb-2">??³</div>
+        <div class="text-sm font-bold text-slate-700">No Lost Property Inquiries Found</div>
+        <p class="text-xs text-slate-500 max-w-sm mx-auto mt-1">
+          ${searchQuery ? 'No inquiry records match your search criteria.' : 'There are currently no lost property inquiries registered on your account.'}
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = displayedItems.map(item => {
+    let statusClass = 'bg-amber-100 text-amber-800 border-amber-300';
+    let statusIcon = '?';
+    let statusLabel = item.status || 'In Review';
+    let statusDesc = 'Station security is inspecting post-arrival compartment sweeps.';
+
+    if (item.status === 'Found & Verified' || item.status === 'In Security Storage') {
+      statusClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+      statusIcon = '?';
+      statusLabel = 'Found & Verified';
+      statusDesc = 'Item recovered! Stored at Station Master Lost Property Desk.';
+    } else if (item.status === 'Claimed by Owner' || item.status === 'Claimed' || item.status === 'Resolved') {
+      statusClass = 'bg-sky-100 text-sky-800 border-sky-300';
+      statusIcon = '??';
+      statusLabel = 'Claimed & Returned';
+      statusDesc = 'Handed over to passenger.';
+    } else if (item.status === 'Cancelled') {
+      statusClass = 'bg-slate-100 text-slate-600 border-slate-300';
+      statusIcon = '?';
+      statusLabel = 'Claim Cancelled';
+      statusDesc = 'Inquiry closed by passenger.';
+    }
+
+    const isFound = (item.status === 'Found & Verified' || item.status === 'In Security Storage');
+    const isClosed = (item.status === 'Claimed by Owner' || item.status === 'Claimed' || item.status === 'Resolved' || item.status === 'Cancelled');
+
+    return `
+      <div class="p-4 rounded-xl border border-slate-200 bg-white hover:border-sky-300 transition-all shadow-sm flex flex-col justify-between gap-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 text-xs font-mono font-bold rounded bg-slate-800 text-white">${item.id}</span>
+            <span class="px-2 py-0.5 text-xs font-semibold rounded bg-sky-50 text-sky-700 border border-sky-200">${item.category || 'Belongings'}</span>
+            <span class="text-xs text-slate-400">?? ${item.date || 'Recent'}</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${statusClass}">
+              <span>${statusIcon}</span> ${statusLabel}
+            </span>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="text-base font-bold text-slate-800">${item.item}</h4>
+          <div class="text-xs text-slate-600 mt-1 flex flex-wrap items-center gap-3">
+            <span>?? <strong>Train:</strong> ${item.train}</span>
+            ${item.station ? `<span>?? <strong>Station:</strong> ${item.station}</span>` : ''}
+          </div>
+          <p class="text-xs text-slate-500 mt-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 italic">
+            "${item.description || 'No additional notes'}"
+          </p>
+        </div>
+
+        ${isFound ? `
+          <div class="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 flex items-start gap-2">
+            <span class="text-base"></span>
+            <div>
+              <strong>Recovery Storage:</strong> ${item.storageLocation || 'Kamalapur Station Master Security Room'}<br>
+              <span class="text-emerald-700">Bring National ID / Ticket to collect. Station Helpdesk: <strong>01700-011233</strong></span>
+            </div>
+          </div>
+        ` : ''}
+
+        <div class="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+          <span class="text-[11px] text-slate-400">${statusDesc}</span>
+          <div class="flex items-center gap-2">
+            <button onclick="window.openLostDetailModal('${item.id}')" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 transition-all flex items-center gap-1">
+              <span>??</span> Details & Guide
+            </button>
+            ${isFound ? `
+              <button onclick="window.resolveLostItemClaim('${item.id}')" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition-all flex items-center gap-1">
+                <span>?</span> Mark Recovered
+              </button>
+            ` : ''}
+            ${!isClosed ? `
+              <button onclick="window.cancelLostItemClaim('${item.id}')" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all">
+                Cancel
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.openLostDetailModal = function(id) {
+  const allItems = JSON.parse(localStorage.getItem('lostItems') || '[]');
+  const item = allItems.find(l => l.id === id);
+  if (!item) return;
+
+  const modalOverlay = document.getElementById('lostDetailModalOverlay');
+  const modalBody = document.getElementById('lostDetailModalBody');
+  const modalActions = document.getElementById('lostDetailModalActions');
+  if (!modalOverlay || !modalBody) return;
+
+  const isFound = (item.status === 'Found & Verified' || item.status === 'In Security Storage');
+
+  modalBody.innerHTML = `
+    <div class="space-y-4">
+      <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <div class="text-xs font-semibold text-slate-500 uppercase">Case Reference ID</div>
+          <div class="text-xl font-bold font-mono text-slate-800">${item.id}</div>
+        </div>
+        <span class="badge ${isFound ? 'badge-success' : 'badge-warning'} text-xs font-bold px-3 py-1">
+          ${item.status || 'In Review'}
+        </span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <div class="p-3 bg-white border border-slate-200 rounded-xl">
+          <span class="text-slate-400 block mb-0.5">Item Name:</span>
+          <strong class="text-slate-800 text-sm">${item.item}</strong>
+          <span class="block text-slate-500 mt-1">Category: ${item.category || 'Personal Property'}</span>
+        </div>
+        <div class="p-3 bg-white border border-slate-200 rounded-xl">
+          <span class="text-slate-400 block mb-0.5">Train & Location:</span>
+          <strong class="text-slate-800 text-sm">${item.train}</strong>
+          <span class="block text-slate-500 mt-1">Date: ${item.date}</span>
+        </div>
+      </div>
+
+      <div class="p-3 bg-white border border-slate-200 rounded-xl text-xs">
+        <span class="text-slate-400 block mb-1">Item Description & Identifying Marks:</span>
+        <p class="text-slate-700 leading-relaxed">${item.description}</p>
+      </div>
+
+      ${isFound ? `
+        <div class="p-4 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-950">
+          <div class="font-bold text-sm text-emerald-900 flex items-center gap-1.5 mb-1">
+            <span>??</span> Item Successfully Located & Stored!
+          </div>
+          <p class="mb-2"><strong>Storage Counter:</strong> ${item.storageLocation || 'Kamalapur Station Master Security Room'}</p>
+          <div class="p-2 bg-white/80 rounded border border-emerald-200 space-y-1 text-slate-700">
+            <div><strong>?? Required to Claim:</strong></div>
+            <div>?¢ Original National ID Card (NID) / Passport / Student ID</div>
+            <div>?¢ Printed Train Ticket / Digital SMS Voucher for ${item.train}</div>
+            <div>?¢ Station Master Lost & Found Helpdesk: <strong>01700-011233</strong> (Open 24/7)</div>
+          </div>
+        </div>
+      ` : `
+        <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
+          <span class="text-base">?</span>
+          <div>
+            <strong>Investigation Status:</strong> Station Master & RPF teams cross-check train sweep logs. You will be notified immediately upon recovery.
+          </div>
+        </div>
+      `}
+    </div>
+  `;
+
+  if (modalActions) {
+    modalActions.innerHTML = `
+      <div class="flex items-center gap-2">
+        <button onclick="window.print()" class="btn btn-outline btn-sm">Print¨ Print Slip</button>
+        ${isFound ? `
+          <button onclick="window.resolveLostItemClaim('${item.id}'); document.getElementById('lostDetailModalOverlay').classList.remove('active');" class="btn btn-primary btn-sm">
+            ? Mark as Recovered
+          </button>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  modalOverlay.classList.add('active');
+};
+
+window.resolveLostItemClaim = function(id) {
+  const items = JSON.parse(localStorage.getItem('lostItems') || '[]');
+  const item = items.find(l => l.id === id);
+  if (!item) return;
+
+  item.status = 'Claimed by Owner';
+  item.resolvedAt = new Date().toLocaleDateString();
+  localStorage.setItem('lostItems', JSON.stringify(items));
+
+  showToast(`Lost property claim #${id} marked as Claimed & Recovered!`, 'success');
+  renderLostItemList();
+};
+
+window.cancelLostItemClaim = function(id) {
+  if (!confirm('Are you sure you want to cancel this lost property inquiry?')) return;
+  const items = JSON.parse(localStorage.getItem('lostItems') || '[]');
+  const item = items.find(l => l.id === id);
+  if (!item) return;
+
+  item.status = 'Cancelled';
+  localStorage.setItem('lostItems', JSON.stringify(items));
+
+  showToast(`Inquiry #${id} cancelled.`, 'info');
+  renderLostItemList();
+};
+
+/* ==========================================================================
+   4. ADMIN DASHBOARD OVERVIEW & COMPREHENSIVE MANAGEMENT PANELS
+   ========================================================================== */
+function renderAdminDashboard() {
+  const users = JSON.parse(localStorage.getItem('users') || '[]');
+  const trains = JSON.parse(localStorage.getItem('trains') || '[]');
+  const bookings = JSON.parse(localStorage.getItem('bookings') || '[]');
+  const tickets = JSON.parse(localStorage.getItem('tickets') || '[]');
+  const complaints = JSON.parse(localStorage.getItem('complaints') || '[]');
+  const cancellations = JSON.parse(localStorage.getItem('cancellations') || '[]');
+  const lostItems = JSON.parse(localStorage.getItem('lostItems') || '[]');
+  const maintenanceLogs = JSON.parse(localStorage.getItem('maintenanceLogs') || '[]');
+
+  const totalRevenue = bookings.reduce((acc, b) => acc + (b.grandTotal || 0), 0);
+  const pendingCmp = complaints.filter(c => c.status === 'Pending' || c.status === 'In Progress').length;
+  const pendingCnc = cancellations.filter(c => c.status === 'Pending').length;
+  const emergencies = JSON.parse(localStorage.getItem('emergencies') || '[]');
+  const activeEmergencies = emergencies.filter(e => e.status === 'Active');
+
+  if (document.getElementById('admTotalUsers')) document.getElementById('admTotalUsers').textContent = users.length;
+  if (document.getElementById('admTotalTrains')) document.getElementById('admTotalTrains').textContent = trains.length;
+  if (document.getElementById('admTotalBookings')) document.getElementById('admTotalBookings').textContent = bookings.length;
+  if (document.getElementById('admTotalRevenue')) document.getElementById('admTotalRevenue').textContent = formatBDT(totalRevenue);
+  if (document.getElementById('admPendingComplaints')) document.getElementById('admPendingComplaints').textContent = pendingCmp;
+  if (document.getElementById('admPendingCancellations')) document.getElementById('admPendingCancellations').textContent = pendingCnc;
+  if (document.getElementById('admActiveEmergencies')) document.getElementById('admActiveEmergencies').textContent = activeEmergencies.length;
+  if (document.getElementById('admEmergenciesCountBadge')) document.getElementById('admEmergenciesCountBadge').textContent = `${activeEmergencies.length} Active`;
+
+  // Populate admin role dashboard cards (View Emergencies + Train Status Update)
+  const emergCardBadge = document.getElementById('adminCardEmergCount');
+  if (emergCardBadge) {
+    emergCardBadge.textContent = `${activeEmergencies.length} Active`;
+    if (activeEmergencies.length > 0) {
+      emergCardBadge.style.background = 'rgba(239,68,68,0.25)';
+      emergCardBadge.style.color = '#fca5a5';
+      emergCardBadge.style.borderColor = 'rgba(239,68,68,0.5)';
+    }
+  }
+  const trainCardBadge = document.getElementById('adminCardTrainCount');
+  if (trainCardBadge) {
+    trainCardBadge.textContent = `${trains.length} Train${trains.length !== 1 ? 's' : ''} in Fleet`;
+  }
+
+  // 0. Render Live Emergency Feed & Fleet Train Status
+  renderAdminEmergenciesTable();
+  renderAdminTrainStatusTable();
+
+  // Setup Admin Train Status Update Form Listener
+  const adminStatusForm = document.getElementById('admTrainStatusForm');
+  if (adminStatusForm && !adminStatusForm.dataset.bound) {
+    adminStatusForm.dataset.bound = 'true';
+    adminStatusForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const trainId = document.getElementById('admStatusTrainId').value;
+      const newStatus = document.getElementById('admStatusSelect').value;
+      const delayMins = parseInt(document.getElementById('admStatusDelayMins').value || '0', 10);
+      const delayReason = document.getElementById('admStatusDelayReason').value;
+
+      const currentTrains = JSON.parse(localStorage.getItem('trains') || '[]');
+      const tIdx = currentTrains.findIndex(t => t.id === trainId);
+      if (tIdx !== -1) {
+        currentTrains[tIdx].status = newStatus;
+        currentTrains[tIdx].delayMinutes = delayMins;
+        currentTrains[tIdx].delayReason = delayReason;
+        localStorage.setItem('trains', JSON.stringify(currentTrains));
+
+        // Dispatch notifications to passengers
+        const notifiedCount = dispatchPassengerDelayNotification(trainId, delayMins, delayReason);
+        closeAdminTrainStatusModal();
+        renderAdminTrainStatusTable();
+        showToast(`Train ${currentTrains[tIdx].name} updated: Status = ${newStatus}, Delay = +${delayMins}m. ${notifiedCount} booked passenger(s) alerted!`, 'success');
+      }
+    });
+  }
+
+  // 1. Ticket & Cancellation Management Panel
+  const ticketsTbody = document.getElementById('admTicketsTableBody');
+  const ticketsCountBadge = document.getElementById('admActiveTicketsCountBadge');
+  if (ticketsCountBadge) ticketsCountBadge.textContent = `${tickets.length} Issued`;
+  if (ticketsTbody) {
+    if (tickets.length === 0) {
+      ticketsTbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-slate-400">No active tickets issued yet.</td></tr>`;
+    } else {
+      ticketsTbody.innerHTML = tickets.slice(0, 5).map(t => `
+        <tr>
+          <td><strong class="font-mono text-sky-400">${t.ticketId || t.id}</strong></td>
+          <td>${t.passengerName || 'Passenger'}</td>
+          <td>${t.trainName}</td>
+          <td class="font-mono font-bold">${formatBDT(t.grandTotal || 650)}</td>
+          <td><span class="badge badge-success">${t.bookingStatus || 'Confirmed'}</span></td>
+        </tr>
+      `).join('');
+    }
+  }
+
+  const cancelTbody = document.getElementById('admCancellationsTableBody');
+  const cancelCountBadge = document.getElementById('admCancellationsCountBadge');
+  if (cancelCountBadge) cancelCountBadge.textContent = `${pendingCnc} Pending Approval`;
+  if (cancelTbody) {
+    if (cancellations.length === 0) {
+      cancelTbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-slate-400">No cancellation requests in queue.</td></tr>`;
+    } else {
+      cancelTbody.innerHTML = cancellations.slice(0, 5).map(c => `
+        <tr>
+          <td><strong class="font-mono text-rose-400">${c.id || 'CNC-101'}</strong></td>
+          <td>${c.ticketId || 'TKT-8901'}</td>
+          <td class="truncate max-w-[120px]" title="${c.reason}">${c.reason || 'Trip reschedule'}</td>
+          <td class="font-mono text-emerald-400">${formatBDT(c.refundAmount || 0)}</td>
+          <td>
+            ${c.status === 'Approved' ? 
+              `<span class="badge badge-success">Refunded</span>` : 
+              `<button onclick="approveAdminCancellation('${c.id}')" class="btn btn-primary btn-sm" style="padding: 0.15rem 0.4rem; font-size: 0.75rem;">Approve</button>`}
+          </td>
+        </tr>
+      `).join('');
+    }
+  }
+
+  // 2. Complaints Management Panel
+  const complaintsTbody = document.getElementById('admComplaintsTableBody');
+  if (complaintsTbody) {
+    if (complaints.length === 0) {
+      complaintsTbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-slate-400">No passenger complaints submitted.</td></tr>`;
+    } else {
+      complaintsTbody.innerHTML = complaints.slice(0, 6).map(cmp => {
+        let statusBadgeClass = 'badge-warning';
+        if (cmp.status === 'Resolved') statusBadgeClass = 'badge-success';
+        else if (cmp.status === 'In Progress') statusBadgeClass = 'badge-info';
+
+        return `
+          <tr>
+            <td><strong class="font-mono text-amber-400">${cmp.id}</strong></td>
+            <td><strong>${cmp.name}</strong></td>
+            <td>${cmp.train}</td>
+            <td class="max-w-[200px] truncate" title="${cmp.description}">${cmp.description}</td>
+            <td><span class="badge ${statusBadgeClass}">${cmp.status}</span></td>
+            <td style="white-space: nowrap;">
+              ${cmp.status !== 'Resolved' ? `
+                <button onclick="updateAdminComplaintStatus('${cmp.id}', 'Resolved')" class="btn btn-primary btn-sm" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">Resolve</button>
+                <button onclick="updateAdminComplaintStatus('${cmp.id}', 'In Progress')" class="btn btn-outline btn-sm" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">Investigate</button>
+              ` : `
+                <span class="text-emerald-400 font-bold text-xs">? Closed</span>
+              `}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+  }
+
+  // 3. Lost Item Management Panel
+  const lostTbody = document.getElementById('admLostItemsTableBody');
+  if (lostTbody) {
+    if (lostItems.length === 0) {
+      lostTbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-slate-400">No lost items currently logged.</td></tr>`;
+    } else {
+      lostTbody.innerHTML = lostItems.slice(0, 5).map(item => `
+        <tr>
+          <td><strong class="font-mono text-emerald-400">${item.id}</strong></td>
+          <td><strong>${item.item}</strong></td>
+          <td>${item.train || 'Kamalapur Station'}</td>
+          <td class="font-mono text-slate-400">${item.date || '2026-08-28'}</td>
+          <td class="max-w-[200px] truncate" title="${item.description}">${item.description}</td>
+          <td><span class="badge ${item.status === 'Claimed' || item.status === 'Found' ? 'badge-success' : 'badge-info'}">${item.status}</span></td>
+          <td>
+            ${item.status !== 'Claimed' ? `
+              <button onclick="updateAdminLostItemStatus('${item.id}', 'Claimed')" class="btn btn-primary btn-sm" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">Mark Claimed</button>
+            ` : `
+              <span class="text-emerald-400 font-bold text-xs">? Returned</span>
+            `}
+          </td>
+        </tr>
+      `).join('');
+    }
+  }
+
+  // Recent Admin Bookings Table
+  const table = document.getElementById('admRecentBookingsTable');
+  if (table) {
+    table.innerHTML = bookings.slice(0, 6).map(b => `
+      <tr>
+        <td><strong>${b.id}</strong></td>
+        <td>${b.passengerName}</td>
+        <td>${b.trainName}</td>
+        <td>${b.source} ? ${b.destination}</td>
+        <td><strong>${formatBDT(b.grandTotal)}</strong></td>
+        <td><span class="badge badge-success">${b.bookingStatus}</span></td>
+      </tr>
+    `).join('');
+  }
+}
+
+// 0. Admin Emergency Center & Train Status Action Handlers
+let currentAdminEmergFilter = 'all';
+
+window.filterAdminEmergencies = function(filter) {
+  currentAdminEmergFilter = filter;
+  renderAdminEmergenciesTable(filter);
+};
+
+window.renderAdminEmergenciesTable = function(filter = currentAdminEmergFilter) {
+  const tbody = document.getElementById('admEmergenciesTableBody');
+  if (!tbody) return;
+
+  const emergencies = JSON.parse(localStorage.getItem('emergencies') || '[]');
+  let filtered = emergencies;
+  if (filter && filter !== 'all') {
+    filtered = emergencies.filter(e => e.status === filter);
+  }
+
+  const activeCount = emergencies.filter(e => e.status === 'Active').length;
+  const countEl = document.getElementById('admActiveEmergencies');
+  if (countEl) countEl.textContent = activeCount;
+  const badgeEl = document.getElementById('admEmergenciesCountBadge');
+  if (badgeEl) badgeEl.textContent = `${activeCount} Active`;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-slate-400">No emergency reports found for selected filter (${filter}).</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(e => {
+    let sevBadge = 'bg-amber-500/20 text-amber-300 border border-amber-500/40';
+    if (e.severity && (e.severity.includes('Critical') || e.severity.includes('Immediate'))) {
+      sevBadge = 'bg-rose-500/20 text-rose-300 border border-rose-500/50 font-black';
+    }
+
+    let statusBadge = 'bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse';
+    if (e.status === 'Acknowledged') statusBadge = 'bg-amber-500/20 text-amber-400 border border-amber-500/40';
+    if (e.status === 'Resolved') statusBadge = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
+
+    return `
+      <tr class="border-b border-slate-700/50 hover:bg-slate-900/30">
+        <td class="py-2.5"><strong class="font-mono text-rose-400 font-bold">${e.id}</strong></td>
+        <td>
+          <div class="font-bold text-white">${e.trainName}</div>
+          <div class="font-mono text-[10px] text-slate-400">${e.trainId}</div>
+        </td>
+        <td class="font-semibold text-slate-200">${e.type}</td>
+        <td><span class="px-2 py-0.5 rounded text-[10px] ${sevBadge}">${e.severity}</span></td>
+        <td class="text-slate-300 font-medium">${e.location}</td>
+        <td>
+          <div class="text-slate-300 text-[11px] font-medium">${e.reportedBy || 'Train Manager'}</div>
+          <div class="text-slate-500 text-[10px]">${e.reportedAt}</div>
+        </td>
+        <td class="max-w-[180px] truncate text-slate-300" title="${e.description}">${e.description}</td>
+        <td><span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${statusBadge}">${e.status}</span></td>
+        <td style="white-space: nowrap;">
+          ${e.status === 'Active' ? `
+            <button onclick="adminAcknowledgeEmergency('${e.id}')" class="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-500 text-white transition-all shadow cursor-pointer mr-1">Acknowledge</button>
+            <button onclick="adminResolveEmergency('${e.id}')" class="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow cursor-pointer">Resolve</button>
+          ` : (e.status === 'Acknowledged' ? `
+            <button onclick="adminResolveEmergency('${e.id}')" class="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow cursor-pointer">Resolve</button>
+          ` : `
+            <span class="text-emerald-400 font-bold text-xs">? Cleared</span>
+          `)}
+        </td>
+      </tr>
+    `;
+  }).join('');
+};
+
+window.adminAcknowledgeEmergency = function(id) {
+  const emergencies = JSON.parse(localStorage.getItem('emergencies') || '[]');
+  const idx = emergencies.findIndex(e => e.id === id);
+  if (idx !== -1) {
+    emergencies[idx].status = 'Acknowledged';
+    localStorage.setItem('emergencies', JSON.stringify(emergencies));
+    showToast(`Emergency #${id} marked as ACKNOWLEDGED by Control HQ. Priority assistance dispatched.`, 'info');
+    renderAdminEmergenciesTable();
+  }
+};
+
+window.adminResolveEmergency = function(id) {
+  const emergencies = JSON.parse(localStorage.getItem('emergencies') || '[]');
+  const idx = emergencies.findIndex(e => e.id === id);
+  if (idx !== -1) {
+    emergencies[idx].status = 'Resolved';
+    localStorage.setItem('emergencies', JSON.stringify(emergencies));
+    showToast(`Emergency #${id} marked as RESOLVED and cleared from active alarms!`, 'success');
+    renderAdminEmergenciesTable();
+  }
+};
+
+window.renderAdminTrainStatusTable = function() {
+  const tbody = document.getElementById('admTrainStatusTableBody');
+  if (!tbody) return;
+
+  const trains = JSON.parse(localStorage.getItem('trains') || '[]');
+  tbody.innerHTML = trains.map(t => {
+    const delayMins = t.delayMinutes || 0;
+    const isDelayed = delayMins > 0 || t.status === 'Delayed';
+    let delayBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">On Time</span>';
+    if (isDelayed) {
+      delayBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-black bg-amber-500/20 text-amber-400 border border-amber-500/40">+${delayMins}m (${t.delayReason || 'Congestion'})</span>`;
+    }
+
+    let statusBadge = 'badge-success';
+    if (t.status === 'Delayed') statusBadge = 'badge-warning';
+    else if (t.status === 'Under Maintenance' || t.status === 'Cancelled') statusBadge = 'badge-danger';
+    else if (t.status === 'In Transit' || t.status === 'Ready for Boarding') statusBadge = 'badge-info';
+
+    return `
+      <tr class="border-b border-slate-700/50 hover:bg-slate-900/30">
+        <td><strong class="font-mono text-cyan-400 font-bold">${t.id}</strong></td>
+        <td>
+          <div class="font-bold text-white">${t.name}</div>
+          <div class="text-[10px] text-slate-400">${t.type || 'Intercity Express'}</div>
+        </td>
+        <td class="text-slate-300 font-medium">${t.source} ? ${t.destination}</td>
+        <td>
+          <div class="text-white font-mono text-xs">${t.departure || '07:00 AM'} - ${t.arrival || '12:15 PM'}</div>
+        </td>
+        <td>${delayBadge}</td>
+        <td><span class="badge ${statusBadge}">${t.status || 'Operational'}</span></td>
+        <td class="text-right">
+          <button onclick="openAdminTrainStatusModal('${t.id}')" class="px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl transition-all shadow cursor-pointer">
+            Update Status
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+};
+
+window.openAdminTrainStatusModal = function(trainId) {
+  const trains = JSON.parse(localStorage.getItem('trains') || '[]');
+  const train = trains.find(t => t.id === trainId);
+  if (!train) return;
+
+  const idInput = document.getElementById('admStatusTrainId');
+  const nameInput = document.getElementById('admStatusTrainName');
+  const select = document.getElementById('admStatusSelect');
+  const delayInput = document.getElementById('admStatusDelayMins');
+  const reasonSelect = document.getElementById('admStatusDelayReason');
+
+  if (idInput) idInput.value = train.id;
+  if (nameInput) nameInput.value = `${train.name} (${train.id})`;
+  if (select) select.value = train.status || 'Operational';
+  if (delayInput) delayInput.value = train.delayMinutes || 0;
+  if (reasonSelect && train.delayReason) reasonSelect.value = train.delayReason;
+
+  const modal = document.getElementById('admTrainStatusModalOverlay');
+  if (modal) modal.classList.add('active');
+};
+
+window.closeAdminTrainStatusModal = function() {
+  const modal = document.getElementById('admTrainStatusModalOverlay');
+  if (modal) modal.classList.remove('active');
+};
+
+// Admin Panel Action Handlers
+window.approveAdminCancellation = function(cancelId) {
+  const cancellations = JSON.parse(localStorage.getItem('cancellations') || '[]');
+  const idx = cancellations.findIndex(c => c.id === cancelId);
+  if (idx !== -1) {
+    cancellations[idx].status = 'Approved';
+    localStorage.setItem('cancellations', JSON.stringify(cancellations));
+
+    // Also record in refunds
+    const refunds = JSON.parse(localStorage.getItem('refunds') || '[]');
+    refunds.unshift({
+      id: `RFD-${Math.floor(100 + Math.random() * 900)}`,
+      cancellationId: cancelId,
+      amount: cancellations[idx].refundAmount || 650,
+      status: 'Processed',
+      processedAt: new Date().toISOString().split('T')[0]
+    });
+    localStorage.setItem('refunds', JSON.stringify(refunds));
+
+    showToast(`Cancellation ${cancelId} approved and refund released to passenger account.`, 'success');
+    renderAdminDashboard();
+  }
+};
+
+window.updateAdminComplaintStatus = function(complaintId, newStatus) {
+  const complaints = JSON.parse(localStorage.getItem('complaints') || '[]');
+  const idx = complaints.findIndex(c => c.id === complaintId);
+  if (idx !== -1) {
+    complaints[idx].status = newStatus;
+    localStorage.setItem('complaints', JSON.stringify(complaints));
+    showToast(`Complaint ${complaintId} marked as ${newStatus}.`, 'success');
+    renderAdminDashboard();
+  }
+};
+
+window.resolveAdminMaintenance = function(orderId) {
+  const logs = JSON.parse(localStorage.getItem('maintenanceLogs') || '[]');
+  const idx = logs.findIndex(m => m.id === orderId);
+  if (idx !== -1) {
+    logs[idx].status = 'Resolved';
+    localStorage.setItem('maintenanceLogs', JSON.stringify(logs));
+    showToast(`Maintenance order ${orderId} certified and cleared for revenue service!`, 'success');
+    renderAdminDashboard();
+  }
+};
+
+window.updateAdminLostItemStatus = function(itemId, newStatus) {
+  const items = JSON.parse(localStorage.getItem('lostItems') || '[]');
+  const idx = items.findIndex(l => l.id === itemId);
+  if (idx !== -1) {
+    items[idx].status = newStatus;
+    localStorage.setItem('lostItems', JSON.stringify(items));
+    showToast(`Lost item record ${itemId} updated to ${newStatus}.`, 'success');
+    renderAdminDashboard();
+  }
+};
+
+window.openAdminMaintenanceLogModal = function() {
+  let modal = document.getElementById('admMaintModalOverlay');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'admMaintModalOverlay';
+    modal.className = 'modal-overlay active';
+    modal.innerHTML = `
+      <div class="modal-container max-w-md bg-slate-800 text-white border border-slate-700 rounded-2xl p-6 shadow-2xl">
+        <div class="flex justify-between items-center pb-3 border-b border-slate-700 mb-4">
+          <h3 class="text-base font-bold text-white flex items-center gap-2"><span>??? </span> Log Fleet Depot Work Order</h3>
+          <button onclick="document.getElementById('admMaintModalOverlay').remove()" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer">&times;</button>
+        </div>
+        <form id="admMaintCreateForm" class="space-y-3 text-xs">
+          <div>
+            <label class="block text-slate-300 font-bold mb-1">Train / Fleet Unit</label>
+            <select id="admMaintTrainSelect" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white">
+              <option value="TR-701: Sonar Bangla Express">TR-701: Sonar Bangla Express</option>
+              <option value="TR-702: Suborno Express">TR-702: Suborno Express</option>
+              <option value="TR-713: Cox's Bazar Express">TR-713: Cox's Bazar Express</option>
+              <option value="TR-717: Kalindi Express">TR-717: Kalindi Express</option>
+              <option value="TR-755: Silkcity Express">TR-755: Silkcity Express</option>
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-slate-300 font-bold mb-1">Category</label>
+              <select id="admMaintCategoryInput" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white">
+                <option value="Brake & Pneumatic">Brake & Pneumatic</option>
+                <option value="AC & HVAC Cooling">AC & HVAC Cooling</option>
+                <option value="Locomotive Engine">Locomotive Engine</option>
+                <option value="Coupler & Wheelset">Coupler & Wheelset</option>
+                <option value="Electrical & Power">Electrical & Power</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-300 font-bold mb-1">Severity</label>
+              <select id="admMaintSeverityInput" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white">
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+                <option value="Critical">Critical</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-slate-300 font-bold mb-1">Component / Target Coach</label>
+            <input type="text" id="admMaintTargetInput" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white" placeholder="e.g. Loco #3204 or Coach KA" required>
+          </div>
+          <div>
+            <label class="block text-slate-300 font-bold mb-1">Work Description</label>
+            <textarea id="admMaintDescInput" rows="2" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white" placeholder="Describe fault and replacement requirements..." required></textarea>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-700 flex justify-end gap-2">
+            <button type="button" onclick="document.getElementById('admMaintModalOverlay').remove()" class="btn btn-outline">Cancel</button>
+            <button type="submit" class="btn btn-primary">Dispatch Work Order</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('admMaintCreateForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const trainStr = document.getElementById('admMaintTrainSelect').value;
+      const category = document.getElementById('admMaintCategoryInput').value;
+      const severity = document.getElementById('admMaintSeverityInput').value;
+      const target = document.getElementById('admMaintTargetInput').value.trim();
+      const desc = document.getElementById('admMaintDescInput').value.trim();
+
+      const newOrder = {
+        id: `MNT-${Math.floor(500 + Math.random() * 500)}`,
+        trainId: trainStr.split(':')[0],
+        trainName: trainStr.split(':')[1]?.trim() || trainStr,
+        category,
+        target,
+        severity,
+        desc,
+        inspector: 'Admin Operations HQ',
+        status: 'Under Repair',
+        date: new Date().toISOString().split('T')[0]
+      };
+
+      const logs = JSON.parse(localStorage.getItem('maintenanceLogs') || '[]');
+      logs.unshift(newOrder);
+      localStorage.setItem('maintenanceLogs', JSON.stringify(logs));
+
+      document.getElementById('admMaintModalOverlay').remove();
+      showToast(`Depot work order ${newOrder.id} dispatched successfully!`, 'success');
+      renderAdminDashboard();
+    });
+  } else {
+    modal.classList.add('active');
+  }
+};
+
+/* ==========================================================================
+   5. GENERIC ADMIN DATATABLE CRUD ENGINE FOR ALL 15 MANAGEMENT PAGES
+   ========================================================================== */
+async function initAdminCrudTable(pagePath) {
+  const currentUser = getCurrentUser() || {};
+
+  // Map page path to storage key & schema definition
+  const config = {
+    'manage-trains.html': {
+key: 'trains',
+title: 'Train',
+fields: ['name', 'type', 'travelDuration', 'offDay', 'status']
+},
+
+    'manage-coaches.html': {
+  key: 'coaches',
+  title: 'Coach',
+  fields: ['trainId', 'name', 'type', 'seatsCount', 'status']
+},
+    'manage-seats.html': { key: 'seats', title: 'Seat', fields: ['trainId', 'coach', 'seatNumber', 'classType', 'status'] },
+    'manage-stations.html': { key: 'stations', title: 'Station', fields: ['name', 'code', 'city', 'platforms', 'status'] },
+    'manage-platforms.html': { key: 'platforms', title: 'Platform', fields: ['station', 'platformNumber', 'type', 'status'] },
+    'manage-routes.html': { key: 'routes', title: 'Route', fields: ['routeName', 'source', 'destination', 'distanceKm', 'status'] },
+    'manage-schedules.html': { key: 'schedules', title: 'Train Schedule', fields: ['trainName', 'trainId', 'departureTime', 'arrivalTime', 'source', 'destination', 'platform', 'status'] },
+    'manage-bookings.html': { key: 'bookings', title: 'Booking', fields: ['passengerName', 'trainName', 'coach', 'grandTotal', 'bookingStatus'] },
+    'manage-payments.html': { key: 'bookings', title: 'Payment', fields: ['id', 'passengerName', 'grandTotal', 'paymentMethod', 'paymentStatus'] },
+    'manage-tickets.html': { key: 'tickets', title: 'Ticket', fields: ['ticketId', 'passengerName', 'trainName', 'coach', 'bookingStatus'] },
+    'manage-cancellations.html': { key: 'cancellations', title: 'Cancellation', fields: ['ticketId', 'train', 'reason', 'refundAmount', 'status'] },
+    'manage-refunds.html': { key: 'refunds', title: 'Refund', fields: ['cancellationId', 'amount', 'status', 'processedAt'] },
+    'manage-complaints.html': { key: 'complaints', title: 'Complaint', fields: ['name', 'train', 'description', 'status'] },
+    'manage-lost-items.html': { key: 'lostItems', title: 'Lost Item', fields: ['item', 'train', 'date', 'description', 'status'] },
+    'manage-maintenance.html': { key: 'maintenanceLogs', title: 'Maintenance Work Order', fields: ['trainName', 'category', 'target', 'severity', 'status', 'date'] },
+    'manage-employees.html': { key: 'employees', title: 'Employee', fields: ['name', 'designation', 'station', 'phone', 'emergencyContact', 'status'] }
+  }[pagePath];
+
+  if (!config) return;
+
+  let currentData = JSON.parse(localStorage.getItem(config.key) || '[]');
+
+  // Schedules must always come from Oracle, not localStorage.
+  if (pagePath === 'manage-schedules.html') {
+    try {
+      currentData = await databaseGet('manage-schedules.html');
+      console.log('[SCHEDULE CRUD] Loaded schedules from Oracle:', currentData);
+    } catch (error) {
+      console.error('[SCHEDULE CRUD] Failed to load schedules from Oracle:', error);
+      currentData = [];
+    }
+  }
+
+  // Station-wise Isolation for Station Master, Ticket Manager, and Train Manager
+  const userRole = currentUser.role;
+  const userStation = currentUser.station || '';
+  let isStationScoped = false;
+
+  if (['station_master', 'ticket_manager', 'train_manager'].includes(userRole) && userStation) {
+    isStationScoped = true;
+
+    if (pagePath === 'manage-stations.html') {
+      currentData = currentData.filter(s => s.name === userStation || (s.city && userStation.includes(s.city)));
+    } else if (pagePath === 'manage-platforms.html') {
+      currentData = currentData.filter(p => p.station === userStation || (p.station && p.station.includes(userStation.split(' ')[0])));
+    } else if (pagePath === 'manage-trains.html') {
+      currentData = currentData.filter(t => t.source === userStation || t.destination === userStation || (t.source && t.source.includes(userStation.split(' ')[0])) || (t.destination && t.destination.includes(userStation.split(' ')[0])));
+    } else if (pagePath === 'manage-schedules.html') {
+      currentData = currentData.filter(sch => sch.source === userStation || sch.destination === userStation || (sch.source && sch.source.includes(userStation.split(' ')[0])) || (sch.destination && sch.destination.includes(userStation.split(' ')[0])) || (sch.routeInfo && sch.routeInfo.includes(userStation.split(' ')[0])));
+    } else if (pagePath === 'manage-tickets.html' || pagePath === 'manage-bookings.html') {
+      currentData = currentData.filter(t => t.source === userStation || t.destination === userStation || (t.source && t.source.includes(userStation.split(' ')[0])) || (t.destination && t.destination.includes(userStation.split(' ')[0])));
+    } else if (pagePath === 'manage-cancellations.html') {
+      currentData = currentData.filter(c => !c.station || c.station === userStation || (currentUser.assignedTrainName && c.train === currentUser.assignedTrainName));
+    } else if (pagePath === 'manage-lost-items.html') {
+      currentData = currentData.filter(l => !l.station || l.station === userStation || (currentUser.assignedTrainName && l.train === currentUser.assignedTrainName));
+    }
+  }
+
+  // Display Station Scope Banner if user is station-scoped
+  const mainEl = document.querySelector('.dashboard-main');
+  if (isStationScoped && mainEl && !document.getElementById('stationScopeBanner')) {
+    const banner = document.createElement('div');
+    banner.id = 'stationScopeBanner';
+    banner.className = 'mb-4 p-3.5 bg-slate-800/90 border border-emerald-500/40 rounded-xl text-xs flex flex-wrap items-center justify-between gap-2 shadow-lg';
+    
+    let roleTitle = 'Station Staff';
+    if (userRole === 'station_master') roleTitle = 'Station Master';
+    else if (userRole === 'ticket_manager') roleTitle = 'Ticket Manager';
+    else if (userRole === 'train_manager') roleTitle = 'Train Manager';
+
+    banner.innerHTML = `
+      <div class="flex items-center gap-2">
+        <span class="text-base"></span>
+        <span>
+          <strong class="text-white font-bold">${roleTitle} Scope:</strong> 
+          <span class="text-emerald-400 font-bold">${userStation}</span>
+          <span class="text-slate-400 ml-1">(Showing records strictly belonging to your assigned station)</span>
+        </span>
+      </div>
+      <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+        Station-wise Verified
+      </span>
+    `;
+    const header = mainEl.querySelector('.dashboard-header') || mainEl.firstChild;
+    mainEl.insertBefore(banner, header.nextSibling);
+  }
+
+  // Restrict Station Master and Train Manager from adding New Records where forbidden
+  const addBtn = document.getElementById('addNewRecordBtn');
+  const isStationMaster = userRole === 'station_master' || userRole === 'Station Master';
+  const isTrainManager = userRole === 'train_manager' || userRole === 'Train Manager';
+  const isAdmin = userRole === 'admin' || userRole === 'Admin';
+
+  if (isStationMaster) {
+    if (pagePath === 'manage-stations.html' || pagePath === 'manage-trains.html' || pagePath === 'manage-platforms.html' || pagePath === 'manage-routes.html' || pagePath === 'manage-schedules.html') {
+      if (addBtn) {
+        addBtn.style.display = 'none';
+      }
+    }
+  } else if (isTrainManager) {
+    if (pagePath === 'manage-platforms.html' || pagePath === 'manage-coaches.html' || pagePath === 'manage-stations.html' || pagePath === 'manage-routes.html' || pagePath === 'manage-trains.html') {
+      if (addBtn) {
+        addBtn.style.display = 'none';
+      }
+    } else if (pagePath === 'manage-schedules.html') {
+      if (addBtn && isTrainManager) {
+        addBtn.style.display = 'none';
+      } else if (addBtn) {
+        addBtn.innerHTML = '<span></span> Request Schedule Update';
+        addBtn.className = 'btn btn-primary';
+        addBtn.style.display = '';
+        addBtn.onclick = function(e) {
+          e.preventDefault();
+          if (typeof window.openScheduleRequestModal === 'function') {
+            window.openScheduleRequestModal();
+          }
+        };
+      }
+    }
+  } else if (isAdmin) {
+    if (addBtn) {
+      addBtn.style.display = '';
+    }
+  } else if (['user', 'passenger'].includes(userRole)) {
+    if (addBtn) {
+      addBtn.style.display = 'none';
+    }
+  }
+
+  let filteredData = [...currentData];
+
+  const tableBody = document.getElementById('crudTableBody');
+  const searchInput = document.getElementById('crudSearchInput');
+  const sortSelect = document.getElementById('crudSortSelect');
+  const modalOverlay = document.getElementById('crudModalOverlay');
+  const modalForm = document.getElementById('crudModalForm');
+  const modalTitle = document.getElementById('crudModalTitle');
+
+  // Role selector dynamic behavior in modal if present
+  const userRoleSelect = document.getElementById('userRoleSelect');
+  const stationGroup = document.getElementById('stationSelectGroup');
+  const trainGroup = document.getElementById('trainSelectGroup');
+
+  if (userRoleSelect) {
+    const updateModalFieldsVisibility = () => {
+      const selectedRole = userRoleSelect.value;
+      if (stationGroup) {
+        if (['station_master', 'train_manager', 'ticket_manager'].includes(selectedRole)) {
+          stationGroup.style.display = 'block';
+        } else {
+          stationGroup.style.display = 'block'; // Keep accessible
+        }
+      }
+      if (trainGroup) {
+        if (selectedRole === 'train_manager') {
+          trainGroup.style.display = 'block';
+        } else {
+          trainGroup.style.display = 'none';
+        }
+      }
+    };
+    userRoleSelect.addEventListener('change', updateModalFieldsVisibility);
+    updateModalFieldsVisibility();
+  }
+
+  function renderTable() {
+    if (!tableBody) return;
+
+    const showActionsColumn = true;
+
+    if (filteredData.length === 0) {
+      tableBody.innerHTML = `<tr><td colspan="${config.fields.length + (showActionsColumn ? 2 : 1)}" class="text-center py-6 text-slate-400">No records found for assigned station criteria.</td></tr>`;
+      return;
+    }
+
+    tableBody.innerHTML = filteredData.map((row, index) => {
+      const fieldCols = config.fields.map(f => {
+        let val = row[f] !== undefined ? row[f] : 'N/A';
+        if (f.toLowerCase().includes('fare') || f.toLowerCase().includes('amount') || f.toLowerCase().includes('total') || f.toLowerCase().includes('salary')) {
+          val = formatBDT(val);
+        } else if (f === 'emergencyContact') {
+          if (row.emergencyContactName || row.emergencyContactPhone) {
+            return `<td>
+              <div class="text-xs font-bold text-white">${row.emergencyContactName || 'N/A'}</div>
+              <div class="text-[11px] text-sky-400 font-mono flex items-center gap-1.5 mt-0.5">
+                <span>?? ${row.emergencyContactPhone || ''}</span>
+                ${row.emergencyContactRelation ? `<span class="px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 font-sans text-[10px] font-semibold border border-sky-400/30">${row.emergencyContactRelation}</span>` : ''}
+              </div>
+            </td>`;
+          } else {
+            return `<td class="text-slate-500 text-xs italic">Not Specified</td>`;
+          }
+        } else if (f === 'status') {
+          let statVal = val || 'Active';
+          let badgeClass = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+          if (statVal.toLowerCase() === 'on leave' || statVal.toLowerCase() === 'leave') {
+            badgeClass = 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+          } else if (statVal.toLowerCase() === 'inactive' || statVal.toLowerCase() === 'suspended' || statVal.toLowerCase() === 'terminated') {
+            badgeClass = 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+          } else if (statVal.toLowerCase() === 'active') {
+            badgeClass = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+          }
+          return `<td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${badgeClass}">${statVal}</span></td>`;
+        } else if (f === 'role') {
+          let badgeClass = 'bg-sky-500/20 text-sky-300 border-sky-400/30';
+          let roleDisplay = 'Passenger';
+          if (val === 'admin') {
+            badgeClass = 'bg-purple-500/20 text-purple-300 border-purple-400/30';
+            roleDisplay = 'Admin';
+          } else if (val === 'ticket_manager') {
+            badgeClass = 'bg-blue-500/20 text-blue-300 border-blue-400/30';
+            roleDisplay = 'Ticket Manager';
+          } else if (val === 'station_master') {
+            badgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30';
+            roleDisplay = 'Station Master';
+          } else if (val === 'train_manager') {
+            badgeClass = 'bg-cyan-500/20 text-cyan-300 border-cyan-400/30';
+            roleDisplay = 'Train Manager';
+          } else if (val === 'user' || val === 'passenger') {
+            badgeClass = 'bg-sky-500/20 text-sky-300 border-sky-400/30';
+            roleDisplay = 'Passenger';
+          }
+          return `<td><span class="inline-block px-2.5 py-0.5 text-xs font-bold rounded-md border ${badgeClass}">${roleDisplay}</span></td>`;
+        } else if (f === 'station') {
+          if (val && val !== 'N/A') {
+            return `<td><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-emerald-300 border border-emerald-500/30"> ${val}</span></td>`;
+          } else {
+            return `<td class="text-slate-500 text-xs">Unassigned</td>`;
+          }
+        }
+        return `<td>${val}</td>`;
+      }).join('');
+
+      let actionsCell = '';
+      if (showActionsColumn) {
+        if (isStationMaster && (pagePath === 'manage-routes.html' || pagePath === 'manage-platforms.html' || pagePath === 'manage-schedules.html')) {
+          actionsCell = `<span class="inline-block px-2.5 py-0.5 text-xs text-slate-400 bg-slate-800/80 rounded border border-slate-700/60 font-semibold">View Only</span>`;
+        } else if (isTrainManager && (pagePath === 'manage-platforms.html' || pagePath === 'manage-coaches.html')) {
+          actionsCell = `<span class="inline-block px-2.5 py-0.5 text-xs text-slate-400 bg-slate-800/80 rounded border border-slate-700/60 font-semibold">View Only</span>`;
+        } else if (isTrainManager && pagePath === 'manage-schedules.html') {
+          actionsCell = `<button onclick="openScheduleRequestModal('${row.id}')" class="btn btn-primary btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"> Request Update</button>`;
+        } else if (isAdmin) {
+          actionsCell = `
+            <button onclick="editCrudRecord('${row.id}')" class="btn btn-outline btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Edit</button>
+            <button onclick="deleteCrudRecord('${row.id}')" class="btn btn-danger btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Delete</button>
+          `;
+        } else {
+          const editBtnText = pagePath === 'manage-schedules.html' ? '? Update Schedule' : 'Edit';
+          const showDelete = !(['station_master', 'ticket_manager', 'train_manager'].includes(userRole));
+          actionsCell = `
+            <button onclick="editCrudRecord('${row.id}')" class="btn ${pagePath === 'manage-schedules.html' ? 'btn-primary' : 'btn-outline'} btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">${editBtnText}</button>
+            ${showDelete ? `<button onclick="deleteCrudRecord('${row.id}')" class="btn btn-danger btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Delete</button>` : ''}
+          `;
+        }
+      }
+
+      return `
+        <tr>
+          <td><strong>${row.id || index + 1}</strong></td>
+          ${fieldCols}
+          ${showActionsColumn ? `
+            <td style="white-space: nowrap;">
+              ${actionsCell}
+            </td>
+          ` : ''}
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // Search filter
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      filteredData = currentData.filter(row => {
+        return Object.values(row).some(val => String(val).toLowerCase().includes(q));
+      });
+      renderTable();
+    });
+  }
+
+  // Sort handler
+  if (sortSelect) {
+    sortSelect.addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (val === 'asc') {
+        filteredData.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      } else if (val === 'desc') {
+        filteredData.sort((a, b) => String(b.id).localeCompare(String(a.id)));
+      }
+      renderTable();
+    });
+  }
+
+  // Add / Edit Modal Trigger
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      if (modalTitle) modalTitle.textContent = `Add New ${config.title}`;
+      if (modalForm) {
+        modalForm.reset();
+        modalForm.dataset.mode = 'add';
+        delete modalForm.dataset.editId;
+
+        // If station-scoped user, pre-fill station
+        const stationInput = modalForm.querySelector('[name="station"]');
+        if (stationInput && isStationScoped) {
+          stationInput.value = userStation;
+        }
+      }
+      if (modalOverlay) modalOverlay.classList.add('active');
+    });
+  }
+
+  // Close Modal Handler
+  const closeBtn = document.getElementById('closeCrudModalBtn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      if (modalOverlay) modalOverlay.classList.remove('active');
+    });
+  }
+
+  // Handle Form Submission (Add or Edit)
+  if (modalForm) {
+   modalForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  if (isStationMaster && (
+      pagePath === 'manage-routes.html' ||
+      pagePath === 'manage-platforms.html' ||
+      pagePath === 'manage-stations.html' ||
+      pagePath === 'manage-schedules.html'
+  )) {
+    showToast('Permission Denied: Station Masters have View-Only access to this section.', 'warning');
+    return;
+  }
+
+  if (isTrainManager && (
+      pagePath === 'manage-platforms.html' ||
+      pagePath === 'manage-coaches.html' ||
+      pagePath === 'manage-stations.html' ||
+      pagePath === 'manage-routes.html'
+  )) {
+    showToast('Permission Denied: Train Managers have View-Only access to this section.', 'warning');
+    return;
+  }
+
+  const mode = modalForm.dataset.mode || 'add';
+  const editId = modalForm.dataset.editId;
+
+  const formData = new FormData(modalForm);
+  const data = {};
+
+  formData.forEach((value, key) => {
+    data[key] = value;
+  });
+  
+  // Map Lost & Found UI status labels to Oracle-compatible values.
+  // The visible UI labels remain unchanged.
+  if (pagePath === 'manage-lost-items.html' && data.status) {
+    const lostItemStatusMap = {
+      'Searching': 'UNCLAIMED',
+      'In Security Storage': 'UNCLAIMED',
+      'Claimed by Owner': 'CLAIMED',
+      'UNCLAIMED': 'UNCLAIMED',
+      'CLAIMED': 'CLAIMED',
+      'DISPOSED': 'DISPOSED'
+    };
+
+    data.status = lostItemStatusMap[data.status] || data.status;
+  }
+
+  try {
+    /*
+     * Generate database ID for new records.
+     * Oracle will store this ID permanently.
+     */
+    if (mode === 'add') {
+      const prefixes = {
+        'manage-trains.html': 'TR',
+        'manage-coaches.html': 'COA',
+        'manage-seats.html': 'SEA',
+        'manage-stations.html': 'ST',
+        'manage-platforms.html': 'PL',
+        'manage-routes.html': 'RT',
+        'manage-fares.html': 'FA',
+        'manage-maintenance.html': 'MA'
+      };
+
+      if (pagePath !== 'manage-lost-items.html' && pagePath !== 'manage-platforms.html') {
+        const prefix = prefixes[pagePath] || 'REC';
+        data.id = prefix + Date.now().toString().slice(-6);
+      }
+
+      await databaseAdd(pagePath, data);
+
+      showToast(`${config.title} created successfully!`, 'success');
+
+    } else {
+
+      await databaseUpdate(pagePath, editId, data);
+
+      showToast(`${config.title} updated successfully!`, 'success');
+    }
+
+    if (typeof refreshDatabasePage === 'function') {
+      await refreshDatabasePage(pagePath);
+    }
+
+    if (modalOverlay) {
+      modalOverlay.classList.remove('active');
+    }
+
+    /*
+     * Reload the current page so dashboard.js displays
+     * the latest Oracle data.
+     */
+    window.location.reload();
+
+  } catch (error) {
+    console.error('DATABASE CRUD ERROR:', error);
+    showToast(error.message || 'Database operation failed.', 'error');
+  }
+});
+  }
+
+  // Global window functions for table row edit / delete
+  window.editCrudRecord = function(recordId) {
+    if (isStationMaster && (pagePath === 'manage-routes.html' || pagePath === 'manage-platforms.html' || pagePath === 'manage-schedules.html')) {
+      showToast('Permission Denied: Station Masters have View-Only access to this section.', 'warning');
+      return;
+    }
+    if (isTrainManager && (pagePath === 'manage-platforms.html' || pagePath === 'manage-coaches.html' || pagePath === 'manage-stations.html' || pagePath === 'manage-routes.html')) {
+      showToast('Permission Denied: Train Managers have View-Only access to this section.', 'warning');
+      return;
+    }
+    if (isTrainManager && pagePath === 'manage-schedules.html') {
+      if (typeof window.openScheduleRequestModal === 'function') {
+        window.openScheduleRequestModal(recordId);
+      }
+      return;
+    }
+
+    const item = currentData.find(r => r.id === recordId);
+    if (!item) return;
+
+    if (modalTitle) {
+      modalTitle.textContent = pagePath === 'manage-schedules.html' 
+        ? `Update Train Schedule (${item.trainName || recordId})` 
+        : `Edit ${config.title} (${recordId})`;
+    }
+    if (modalForm) {
+      modalForm.dataset.mode = 'edit';
+      modalForm.dataset.editId = recordId;
+
+      config.fields.forEach(f => {
+        const input = modalForm.querySelector(`[name="${f}"]`);
+        if (input && item[f] !== undefined) {
+          input.value = item[f];
+        }
+      });
+
+      if (modalForm.querySelector('[name="role"]')) {
+        modalForm.querySelector('[name="role"]').value = item.role || 'user';
+        if (userRoleSelect) userRoleSelect.dispatchEvent(new Event('change'));
+      }
+      if (modalForm.querySelector('[name="station"]') && item.station) {
+        modalForm.querySelector('[name="station"]').value = item.station;
+      }
+      if (modalForm.querySelector('[name="assignedTrainId"]') && item.assignedTrainId) {
+        modalForm.querySelector('[name="assignedTrainId"]').value = item.assignedTrainId;
+      }
+      if (modalForm.querySelector('[name="emergencyContactName"]')) {
+        modalForm.querySelector('[name="emergencyContactName"]').value = item.emergencyContactName || '';
+      }
+      if (modalForm.querySelector('[name="emergencyContactRelation"]')) {
+        modalForm.querySelector('[name="emergencyContactRelation"]').value = item.emergencyContactRelation || 'Spouse';
+      }
+      if (modalForm.querySelector('[name="emergencyContactPhone"]')) {
+        modalForm.querySelector('[name="emergencyContactPhone"]').value = item.emergencyContactPhone || '';
+      }
+    }
+
+    if (modalOverlay) modalOverlay.classList.add('active');
+  };
+
+  window.deleteCrudRecord = async function(recordId) {
+
+  if (isStationMaster && (
+      pagePath === 'manage-routes.html' ||
+      pagePath === 'manage-platforms.html' ||
+      pagePath === 'manage-stations.html' ||
+      pagePath === 'manage-schedules.html'
+  )) {
+    showToast('Permission Denied: Station Masters cannot delete records.', 'warning');
+    return;
+  }
+
+  if (isTrainManager && (
+      pagePath === 'manage-platforms.html' ||
+      pagePath === 'manage-coaches.html' ||
+      pagePath === 'manage-stations.html' ||
+      pagePath === 'manage-routes.html'
+  )) {
+    showToast('Permission Denied: Train Managers cannot delete records.', 'warning');
+    return;
+  }
+
+  if (isTrainManager && pagePath === 'manage-schedules.html') {
+    showToast('Permission Denied: Train Managers cannot delete schedules directly.', 'warning');
+    return;
+  }
+
+  if (!confirm(`Are you sure you want to delete record ${recordId}?`)) {
+    return;
+  }
+
+  try {
+
+    await databaseDelete(pagePath, recordId);
+
+    showToast(`${config.title} deleted successfully!`, 'success');
+
+    if (typeof refreshDatabasePage === 'function') {
+      await refreshDatabasePage(pagePath);
+    }
+
+    window.location.reload();
+
+  } catch (error) {
+
+    console.error('DATABASE DELETE ERROR:', error);
+
+    showToast(
+      error.message || 'Database delete failed.',
+      'error'
+    );
+  }
+};
+
+  renderTable();
+
+  // Initialize Schedule Requests Log if on manage-schedules.html
+  if (pagePath === 'manage-schedules.html') {
+    initScheduleRequestsManager(pagePath, currentUser);
+  }
+}
+
+/* ==========================================================================
+   SCHEDULE UPDATE REQUESTS HANDLER (TRAIN MANAGER & ADMIN)
+   ========================================================================== */
+function initScheduleRequestsManager(pagePath, currentUser) {
+  if (pagePath !== 'manage-schedules.html') return;
+
+  const userRole = (currentUser && currentUser.role ? currentUser.role.toLowerCase() : '');
+  const isAdmin = userRole === 'admin' || userRole === 'system admin';
+  const isTrainManager = userRole === 'train_manager';
+  const isStationMaster = userRole === 'station_master';
+
+  const tableBody = document.getElementById('scheduleRequestsTableBody');
+  const modalOverlay = document.getElementById('scheduleRequestModalOverlay');
+  const modalForm = document.getElementById('scheduleRequestModalForm');
+  const trainSelect = document.getElementById('reqModalTrainSelect');
+  const currentInfoBox = document.getElementById('reqModalCurrentInfo');
+  const currentInfoVal = document.getElementById('reqModalCurrentInfoVal');
+  const newReqBtn = document.getElementById('openNewRequestBtn');
+
+  let scheduleRows = [];
+  let requestRows = [];
+
+  if (isStationMaster && newReqBtn) {
+    newReqBtn.style.display = 'none';
+  }
+
+  if (newReqBtn && !newReqBtn.dataset.bound) {
+    newReqBtn.dataset.bound = 'true';
+    newReqBtn.addEventListener('click', function () {
+      window.openScheduleRequestModal();
+    });
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function normalizeRequest(row) {
+    const statusRaw = String(
+      row.status ||
+      row.STATUS ||
+      'PENDING'
+    ).toUpperCase();
+
+    let status = 'Pending';
+    if (statusRaw === 'APPROVED') status = 'Approved';
+    if (statusRaw === 'REJECTED') status = 'Rejected';
+
+    const trainId =
+      row.train_id ||
+      row.TRAIN_ID ||
+      row.trainId ||
+      '';
+
+    const trainName =
+      row.train_name ||
+      row.TRAIN_NAME ||
+      row.train ||
+      trainId;
+
+    const requestId =
+      row.request_id ||
+      row.REQUEST_ID ||
+      row.id ||
+      'N/A';
+
+    const requestedChange =
+      row.requested_change ||
+      row.REQUESTED_CHANGE ||
+      row.requestedChange ||
+      '';
+
+    const reason =
+      row.reason ||
+      row.REASON ||
+      '';
+
+    const requestedBy =
+      row.requested_by ||
+      row.REQUESTED_BY ||
+      row.requestedBy ||
+      'Unknown';
+
+    const requestDate =
+      row.request_date ||
+      row.REQUEST_DATE ||
+      row.createdAt ||
+      '';
+
+    return {
+      id: requestId,
+      trainId: trainId,
+      train: trainName,
+      scheduleId:
+        row.schedule_id ||
+        row.SCHEDULE_ID ||
+        '',
+      currentSchedule: buildScheduleSummary(
+        scheduleRows.find(s =>
+          s.id === (row.schedule_id || row.SCHEDULE_ID)
+        )
+      ),
+      requestedChange: requestedChange,
+      reason: reason,
+      status: status,
+      requestedBy: requestedBy,
+      createdAt: requestDate
+    };
+  }
+
+  function buildScheduleSummary(sched) {
+    if (!sched) {
+      return 'Current timetable unavailable';
+    }
+
+    return `Dept: ${sched.departureTime || 'N/A'} | Arr: ${sched.arrivalTime || 'N/A'} | Route: ${sched.source || 'N/A'} ? ${sched.destination || 'N/A'} | Platform: ${sched.platform || 'N/A'} | Status: ${sched.status || 'N/A'}`;
+  }
+
+  async function loadSchedules() {
+    try {
+      const result = await databaseGet('manage-schedules.html');
+
+      if (Array.isArray(result)) {
+        scheduleRows = result;
+      } else if (Array.isArray(result?.schedules)) {
+        scheduleRows = result.schedules;
+      } else if (Array.isArray(result?.data)) {
+        scheduleRows = result.data;
+      } else {
+        scheduleRows = [];
+      }
+
+      console.log(
+        '[SCHEDULE REQUESTS] Loaded schedules:',
+        scheduleRows
+      );
+    } catch (err) {
+      console.warn(
+        '[SCHEDULE REQUESTS] Could not load schedules:',
+        err
+      );
+      scheduleRows = [];
+    }
+
+    populateModalTrains();
+  }
+
+  async function loadRequests() {
+    try {
+      const result = await apiCall('GET', '/api/manager/schedule-requests');
+
+      if (!result.ok) {
+        throw new Error(result.error || 'Failed to load schedule requests.');
+      }
+
+      const rows =
+        result.data?.requests ||
+        result.data?.data ||
+        result.data ||
+        [];
+
+      requestRows = Array.isArray(rows)
+        ? rows.map(normalizeRequest)
+        : [];
+
+      renderRequestsTable();
+    } catch (err) {
+      console.warn('[SCHEDULE REQUESTS] Could not load requests:', err);
+
+      requestRows = [];
+
+      if (tableBody) {
+        tableBody.innerHTML =
+          `<tr><td colspan="8" class="text-center text-rose-300 py-6">Unable to load schedule requests from database.</td></tr>`;
+      }
+    }
+  }
+
+  function populateModalTrains() {
+    if (!trainSelect) return;
+
+    if (!Array.isArray(scheduleRows) || scheduleRows.length === 0) {
+      trainSelect.innerHTML =
+        '<option value="">No schedules available</option>';
+
+      updateCurrentScheduleDisplay();
+      return;
+    }
+
+    trainSelect.innerHTML = scheduleRows.map(s => {
+      const scheduleId =
+        s.id ||
+        s.schedule_id ||
+        s.SCHEDULE_ID ||
+        '';
+
+      const trainId =
+        s.trainId ||
+        s.train_id ||
+        s.TRAIN_ID ||
+        '';
+
+      const trainName =
+        s.trainName ||
+        s.train_name ||
+        s.TRAIN_NAME ||
+        trainId;
+
+      return `<option value="${escapeHtml(scheduleId)}">${escapeHtml(trainName)} (${escapeHtml(trainId)})</option>`;
+    }).join('');
+
+    updateCurrentScheduleDisplay();
+  }
+
+  function getSelectedSchedule() {
+    if (!trainSelect) return null;
+
+    const selectedScheduleId = trainSelect.value;
+
+    return scheduleRows.find(s =>
+      String(
+        s.id ||
+        s.schedule_id ||
+        s.SCHEDULE_ID ||
+        ''
+      ) === String(selectedScheduleId)
+    ) || null;
+  }
+
+  function updateCurrentScheduleDisplay() {
+    if (!trainSelect || !currentInfoBox) return;
+
+    const sched = getSelectedSchedule();
+
+    if (sched) {
+      const summary = buildScheduleSummary(sched);
+
+      currentInfoBox.innerHTML = `
+        <div class="space-y-1">
+          <div class="text-white font-bold">${escapeHtml(sched.trainName)} (${escapeHtml(sched.trainId)})</div>
+          <div class="text-slate-300">
+            Timetable:
+            <span class="text-cyan-300 font-bold">
+              ${escapeHtml(sched.departureTime)} ? ${escapeHtml(sched.arrivalTime)}
+            </span>
+          </div>
+          <div class="text-slate-300">
+            Route:
+            <span class="text-white">
+              ${escapeHtml(sched.source)} ? ${escapeHtml(sched.destination)}
+            </span>
+          </div>
+          <div class="text-slate-300">
+            Platform:
+            <span class="text-amber-300">${escapeHtml(sched.platform || 'N/A')}</span>
+            (${escapeHtml(sched.status || 'Operational')})
+          </div>
+        </div>
+      `;
+
+      if (currentInfoVal) {
+        currentInfoVal.value = summary;
+      }
+    } else {
+      currentInfoBox.innerHTML =
+        `<span class="text-slate-400">Timetable details will sync automatically</span>`;
+
+      if (currentInfoVal) {
+        currentInfoVal.value = 'Current timetable unavailable';
+      }
+    }
+  }
+
+  if (trainSelect && !trainSelect.dataset.boundDb) {
+    trainSelect.dataset.boundDb = 'true';
+    trainSelect.addEventListener('change', updateCurrentScheduleDisplay);
+  }
+
+  window.openScheduleRequestModal = async function(scheduleId) {
+    await loadSchedules();
+
+    if (scheduleId && trainSelect) {
+      const found = scheduleRows.find(s =>
+        s.id === scheduleId ||
+        s.trainId === scheduleId
+      );
+
+      if (found) {
+        trainSelect.value = found.trainId || found.id;
+        updateCurrentScheduleDisplay();
+      }
+    }
+
+    if (modalOverlay) {
+      modalOverlay.classList.add('active');
+    }
+  };
+
+  if (modalForm && !modalForm.dataset.boundDb) {
+    modalForm.dataset.boundDb = 'true';
+
+    modalForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const selected = getSelectedSchedule();
+
+      if (!selected) {
+        showToast('Please select a train schedule.', 'danger');
+        return;
+      }
+
+      const requestedChange =
+        document.getElementById('reqModalRequestedChange')?.value.trim() || '';
+
+      const reason =
+        document.getElementById('reqModalReason')?.value.trim() || '';
+
+      if (!requestedChange) {
+        showToast('Please describe the requested schedule change.', 'danger');
+        return;
+      }
+
+      const result = await apiCall(
+        'POST',
+        '/api/manager/schedule-requests',
+        {
+          train_id: selected.trainId,
+          schedule_id: selected.id,
+          requested_change: requestedChange,
+          reason: reason
+        }
+      );
+
+      if (!result.ok) {
+        showToast(
+          result.error || 'Failed to submit schedule request.',
+          'danger'
+        );
+        return;
+      }
+
+      const requestId =
+        result.data?.request_id ||
+        result.data?.REQUEST_ID ||
+        'new request';
+
+      if (modalOverlay) modalOverlay.classList.remove('active');
+      modalForm.reset();
+
+      await loadRequests();
+
+      showToast(
+        `Schedule update request ${requestId} submitted for Admin review (Status: Pending)!`,
+        'success'
+      );
+    });
+  }
+
+  function renderRequestsTable() {
+    if (!tableBody) return;
+
+    if (requestRows.length === 0) {
+      tableBody.innerHTML =
+        `<tr><td colspan="8" class="text-center text-slate-400 py-6">No schedule update requests logged yet.</td></tr>`;
+      return;
+    }
+
+    tableBody.innerHTML = requestRows.map(r => {
+      let statusBadge = '';
+
+      if (r.status === 'Approved') {
+        statusBadge =
+          `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">✓ Approved</span>`;
+      } else if (r.status === 'Rejected') {
+        statusBadge =
+          `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">✕ Rejected</span>`;
+      } else {
+        statusBadge =
+          `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">⏳ Pending</span>`;
+      }
+
+      let actionsHtml = '';
+
+      if (isAdmin && r.status === 'Pending') {
+        actionsHtml = `
+          <div class="flex gap-1">
+            <button onclick="approveScheduleRequest('${escapeHtml(r.id)}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs cursor-pointer shadow transition-all">✓ Approve</button>
+            <button onclick="rejectScheduleRequest('${escapeHtml(r.id)}')" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-bold text-xs cursor-pointer shadow transition-all">✕ Reject</button>
+          </div>
+        `;
+      } else if (isAdmin) {
+        actionsHtml =
+          `<span class="text-xs text-slate-400 font-semibold italic">Processed</span>`;
+      } else {
+        actionsHtml =
+          `<span class="text-xs text-slate-400 font-semibold">${escapeHtml(r.status)}</span>`;
+      }
+
+      return `
+        <tr>
+          <td><strong class="font-mono text-cyan-300">${escapeHtml(r.id)}</strong></td>
+          <td><strong class="text-white">${escapeHtml(r.train)}</strong></td>
+          <td class="text-xs text-slate-300 max-w-[200px] truncate" title="${escapeHtml(r.currentSchedule)}">${escapeHtml(r.currentSchedule)}</td>
+          <td class="text-xs text-white max-w-[220px]">${escapeHtml(r.requestedChange)}</td>
+          <td class="text-xs text-slate-400 max-w-[180px]">${escapeHtml(r.reason)}</td>
+          <td>${statusBadge}</td>
+          <td class="text-xs text-slate-300">${escapeHtml(r.requestedBy)}<br><span class="text-[10px] text-slate-500">${escapeHtml(r.createdAt)}</span></td>
+          <td>${actionsHtml}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  window.approveScheduleRequest = async function(reqId) {
+    const result = await apiCall(
+      'PUT',
+      `/api/admin/schedule-requests/${encodeURIComponent(reqId)}/approve`
+    );
+
+    if (!result.ok) {
+      showToast(
+        result.error || `Failed to approve request ${reqId}.`,
+        'danger'
+      );
+      return;
+    }
+
+    await loadRequests();
+    await loadSchedules();
+
+    showToast(
+      `Schedule update request ${reqId} Approved. Timetable synchronized!`,
+      'success'
+    );
+
+    if (typeof window.refreshDatabasePage === 'function') {
+      window.refreshDatabasePage('manage-schedules.html');
+    }
+  };
+
+  window.rejectScheduleRequest = async function(reqId) {
+    const result = await apiCall(
+      'PUT',
+      `/api/admin/schedule-requests/${encodeURIComponent(reqId)}/reject`
+    );
+
+    if (!result.ok) {
+      showToast(
+        result.error || `Failed to reject request ${reqId}.`,
+        'danger'
+      );
+      return;
+    }
+
+    await loadRequests();
+
+    showToast(
+      `Schedule update request ${reqId} marked as Rejected.`,
+      'info'
+    );
+  };
+
+  loadSchedules();
+  loadRequests();
+}
+/* ==========================================================================
+   6. PROFILE PAGE ENGINE (WITH STATION-WISE DISPLAY)
+   ========================================================================== */
+function renderProfilePage() {
+  const currentUser = getCurrentUser();
+  if (!currentUser) {
+    window.location.href = 'login.html';
+    return;
+  }
+
+  // Populate Summary Card
+  const avatarEl = document.getElementById('profAvatarDisplay');
+  const roleBadgeEl = document.getElementById('profRoleBadge');
+  const nameEl = document.getElementById('profSummaryName');
+  const emailEl = document.getElementById('profSummaryEmail');
+  const idEl = document.getElementById('profSummaryId');
+  const roleEl = document.getElementById('profSummaryRole');
+  const phoneEl = document.getElementById('profSummaryPhone');
+  const staffDutyRow = document.getElementById('profStaffDutyRow');
+  const staffDesigEl = document.getElementById('profSummaryDesignation');
+  const staffStationRow = document.getElementById('profStaffStationRow');
+  const staffStationEl = document.getElementById('profSummaryStation');
+  const staffTrainRow = document.getElementById('profStaffTrainRow');
+  const staffTrainEl = document.getElementById('profSummaryTrain');
+
+  let roleDisplay = 'Passenger';
+  let badgeColor = 'bg-sky-500';
+
+  if (currentUser.role === 'admin') {
+    roleDisplay = 'System Admin';
+    badgeColor = 'bg-purple-600';
+  } else if (currentUser.role === 'ticket_manager') {
+    roleDisplay = 'Ticket Manager';
+    badgeColor = 'bg-blue-600';
+  } else if (currentUser.role === 'station_master') {
+    roleDisplay = 'Station Master';
+    badgeColor = 'bg-emerald-600';
+  } else if (currentUser.role === 'train_manager') {
+    roleDisplay = 'Train Manager';
+    badgeColor = 'bg-cyan-600';
+  }
+
+  if (avatarEl) {
+    const initial = currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U';
+    avatarEl.textContent = initial;
+  }
+  if (roleBadgeEl) {
+    roleBadgeEl.textContent = roleDisplay;
+    roleBadgeEl.className = `absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-0.5 text-xs font-bold rounded-full text-white shadow ${badgeColor}`;
+  }
+  if (nameEl) nameEl.textContent = currentUser.name || 'User';
+  if (emailEl) emailEl.textContent = currentUser.email || '';
+  if (idEl) idEl.textContent = currentUser.id || 'USR-1001';
+  if (roleEl) roleEl.textContent = roleDisplay;
+  if (phoneEl) phoneEl.textContent = currentUser.phone || 'N/A';
+
+  // Explicit Station Display for Station Master, Train Manager, Ticket Manager
+  if (staffStationRow && (currentUser.station || ['station_master', 'train_manager', 'ticket_manager'].includes(currentUser.role))) {
+    staffStationRow.classList.remove('hidden');
+    if (staffStationEl) {
+      staffStationEl.textContent = currentUser.station || 'Dhaka (Kamalapur)';
+    }
+  }
+
+  // Explicit Train Display for Train Manager
+  if (staffTrainRow && currentUser.role === 'train_manager') {
+    staffTrainRow.classList.remove('hidden');
+    if (staffTrainEl) {
+      staffTrainEl.textContent = currentUser.assignedTrainName || 'Sonar Bangla Express (TR-701)';
+    }
+  }
+
+  if (staffDutyRow && (currentUser.designation || currentUser.role !== 'user')) {
+    staffDutyRow.classList.remove('hidden');
+    if (staffDesigEl) staffDesigEl.textContent = currentUser.designation || roleDisplay;
+  }
+
+  // Emergency Contact Handling (All roles except Passenger)
+  const isStaffRole = (currentUser.role !== 'user' && currentUser.role !== 'passenger');
+  const emgSummaryBox = document.getElementById('profEmergencyContactSummary');
+  const emgSummaryName = document.getElementById('profSummaryEmgName');
+  const emgSummaryRelation = document.getElementById('profSummaryEmgRelation');
+  const emgSummaryPhone = document.getElementById('profSummaryEmgPhone');
+
+  if (emgSummaryBox) {
+    if (isStaffRole) {
+      emgSummaryBox.classList.remove('hidden');
+      if (emgSummaryName) emgSummaryName.textContent = currentUser.emergencyContactName || 'Not Set';
+      if (emgSummaryRelation) emgSummaryRelation.textContent = currentUser.emergencyContactRelation || 'Not Set';
+      if (emgSummaryPhone) emgSummaryPhone.textContent = currentUser.emergencyContactPhone || 'Not Set';
+    } else {
+      emgSummaryBox.classList.add('hidden');
+    }
+  }
+
+  // Populate Form Inputs
+  const inputName = document.getElementById('profInputName');
+  const inputEmail = document.getElementById('profInputEmail');
+  const inputPhone = document.getElementById('profInputPhone');
+  const inputNid = document.getElementById('profInputNid');
+  const inputDob = document.getElementById('profInputDob');
+  const inputGender = document.getElementById('profInputGender');
+  const inputAddress = document.getElementById('profInputAddress');
+
+  const emgSection = document.getElementById('profEmergencyContactSection');
+  const inputEmgName = document.getElementById('profInputEmgName');
+  const inputEmgRelation = document.getElementById('profInputEmgRelation');
+  const inputEmgPhone = document.getElementById('profInputEmgPhone');
+
+  if (emgSection) {
+    if (isStaffRole) {
+      emgSection.classList.remove('hidden');
+      if (inputEmgName) inputEmgName.value = currentUser.emergencyContactName || '';
+      if (inputEmgRelation) inputEmgRelation.value = currentUser.emergencyContactRelation || 'Spouse';
+      if (inputEmgPhone) inputEmgPhone.value = currentUser.emergencyContactPhone || '';
+    } else {
+      emgSection.classList.add('hidden');
+    }
+  }
+
+  if (inputName) inputName.value = currentUser.name || '';
+  if (inputEmail) inputEmail.value = currentUser.email || '';
+  if (inputPhone) inputPhone.value = currentUser.phone || '';
+  if (inputNid) inputNid.value = currentUser.nid || '';
+  if (inputDob) inputDob.value = currentUser.dob || '';
+  if (inputGender) inputGender.value = currentUser.gender || 'Male';
+  if (inputAddress) inputAddress.value = currentUser.address || '';
+
+  // Profile Info Form Submit Handler
+  const infoForm = document.getElementById('profileInfoForm');
+  if (infoForm && !infoForm.dataset.bound) {
+    infoForm.dataset.bound = 'true';
+    infoForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const updatedName = inputName.value.trim();
+      const updatedPhone = inputPhone.value.trim();
+      const updatedNid = inputNid.value.trim();
+      const updatedDob = inputDob.value;
+      const updatedGender = inputGender.value;
+      const updatedAddress = inputAddress.value.trim();
+
+      if (!updatedName || !updatedPhone) {
+        showToast('Please provide your name and phone number.', 'danger');
+        return;
+      }
+
+      currentUser.name = updatedName;
+      currentUser.phone = updatedPhone;
+      currentUser.nid = updatedNid;
+      currentUser.dob = updatedDob;
+      currentUser.gender = updatedGender;
+      currentUser.address = updatedAddress;
+
+      if (isStaffRole) {
+        const updatedEmgName = inputEmgName ? inputEmgName.value.trim() : '';
+        const updatedEmgRelation = inputEmgRelation ? inputEmgRelation.value : '';
+        const updatedEmgPhone = inputEmgPhone ? inputEmgPhone.value.trim() : '';
+        currentUser.emergencyContactName = updatedEmgName;
+        currentUser.emergencyContactRelation = updatedEmgRelation;
+        currentUser.emergencyContactPhone = updatedEmgPhone;
+      }
+
+      setCurrentUser(currentUser);
+
+      const users = JSON.parse(localStorage.getItem('users') || '[]');
+      const userIdx = users.findIndex(u => u.id === currentUser.id || u.email === currentUser.email);
+      if (userIdx !== -1) {
+        users[userIdx] = { ...users[userIdx], ...currentUser };
+        localStorage.setItem('users', JSON.stringify(users));
+      }
+
+      // Also sync employee directory if matched
+      if (isStaffRole) {
+        const employees = JSON.parse(localStorage.getItem('employees') || '[]');
+        let empChanged = false;
+        employees.forEach(emp => {
+          if (emp.name === currentUser.name || emp.phone === currentUser.phone || emp.id === currentUser.id) {
+            emp.emergencyContactName = currentUser.emergencyContactName;
+            emp.emergencyContactRelation = currentUser.emergencyContactRelation;
+            emp.emergencyContactPhone = currentUser.emergencyContactPhone;
+            empChanged = true;
+          }
+        });
+        if (empChanged) {
+          localStorage.setItem('employees', JSON.stringify(employees));
+        }
+      }
+
+      showToast('Profile information updated successfully!', 'success');
+      updateNavbar();
+      renderProfilePage();
+    });
+  }
+
+  // Password Update Form Handler
+  const passForm = document.getElementById('profilePasswordForm');
+  if (passForm && !passForm.dataset.bound) {
+    passForm.dataset.bound = 'true';
+    passForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const currPass = document.getElementById('profCurrPass').value;
+      const newPass = document.getElementById('profNewPass').value;
+      const confirmPass = document.getElementById('profConfirmPass').value;
+
+      if (currPass !== currentUser.password) {
+        showToast('Current password is incorrect.', 'danger');
+        return;
+      }
+      if (newPass.length < 4) {
+        showToast('New password must be at least 4 characters long.', 'danger');
+        return;
+      }
+      if (newPass !== confirmPass) {
+        showToast('New password and confirm password do not match.', 'danger');
+        return;
+      }
+
+      currentUser.password = newPass;
+      setCurrentUser(currentUser);
+
+      const users = JSON.parse(localStorage.getItem('users') || '[]');
+      const userIdx = users.findIndex(u => u.id === currentUser.id || u.email === currentUser.email);
+      if (userIdx !== -1) {
+        users[userIdx].password = newPass;
+        localStorage.setItem('users', JSON.stringify(users));
+      }
+
+      showToast('Password updated successfully!', 'success');
+      passForm.reset();
+    });
+  }
+}
+
+/* ==========================================================================
+   7. TRAIN MANAGER DASHBOARD ENGINE (ALL 8 REQUIRED FEATURES)
+   ========================================================================== */
+function initTrainManagerDashboard() {
+  const currentUser = getCurrentUser();
+  if (!currentUser) {
+    window.location.href = 'login.html';
+    return;
+  }
+
+  // Assigned Station & Default Assigned Train
+  const assignedStation = currentUser.station || 'Dhaka (Kamalapur)';
+  let trains = JSON.parse(localStorage.getItem('trains') || '[]');
+  
+  // Filter trains corresponding to manager's assigned station
+  let stationTrains = trains.filter(t => 
+    t.source === assignedStation || 
+    t.destination === assignedStation ||
+    (t.source && t.source.includes(assignedStation.split(' ')[0])) ||
+    (t.destination && t.destination.includes(assignedStation.split(' ')[0]))
+  );
+
+  if (stationTrains.length === 0) {
+    stationTrains = trains; // Fallback to all if custom station
+  }
+
+  // Active Train State
+  let activeTrainId = currentUser.assignedTrainId || stationTrains[0]?.id || 'TR-701';
+  let activeTrain = trains.find(t => t.id === activeTrainId) || stationTrains[0] || {
+    id: 'TR-701',
+    name: 'Sonar Bangla Express',
+    type: 'Intercity Super Fast',
+    source: 'Dhaka (Kamalapur)',
+    destination: 'Chattogram Junction',
+    departure: '07:00 AM',
+    arrival: '12:15 PM',
+    duration: '5h 15m',
+    platform: 'Platform #1',
+    offDay: 'Saturday',
+    fare: 650,
+    status: 'Operational',
+    delayMinutes: 0
+  };
+
+  // Populate Train Switcher & Station Badges
+  const stationBadge = document.getElementById('tmStationBadge');
+  if (stationBadge) stationBadge.textContent = `Assigned Station: ${assignedStation}`;
+
+  const trainSelect = document.getElementById('tmTrainSelect');
+  if (trainSelect) {
+    trainSelect.innerHTML = stationTrains.map(t => `
+      <option value="${t.id}" ${t.id === activeTrain.id ? 'selected' : ''}>
+        ${t.name} (${t.id})
+      </option>
+    `).join('');
+
+    trainSelect.addEventListener('change', (e) => {
+      activeTrainId = e.target.value;
+      activeTrain = trains.find(t => t.id === activeTrainId) || activeTrain;
+      renderAllTrainManagerFeatures();
+      showToast(`Switched active management to ${activeTrain.name}`, 'info');
+    });
+  }
+
+  // Coach and Seat Configuration Mock Engine
+  const coachesData = [
+    { code: 'KA', name: 'Coach KA (AC Berth)', class: 'AC Berth', totalSeats: 36, bookedSeats: 32, fare: 1200, ac: 'Optimal (21°C)', power: 'Normal (230V)', cleanliness: 'Inspected' },
+    { code: 'KHA', name: 'Coach KHA (Snigdha)', class: 'AC Chair / Snigdha', totalSeats: 60, bookedSeats: 52, fare: 850, ac: 'Optimal (22°C)', power: 'Normal (230V)', cleanliness: 'Inspected' },
+    { code: 'GA', name: 'Coach GA (Shovon)', class: 'Shovon Chair', totalSeats: 70, bookedSeats: 58, fare: 450, ac: 'Natural / Fan', power: 'Normal', cleanliness: 'Clean' },
+    { code: 'GHA', name: 'Coach GHA (Shovon)', class: 'Shovon Chair', totalSeats: 70, bookedSeats: 56, fare: 450, ac: 'Natural / Fan', power: 'Normal', cleanliness: 'Clean' },
+    { code: 'UMA', name: 'Coach UMA (Guard/Luggage)', class: 'Brake Van', totalSeats: 20, bookedSeats: 14, fare: 350, ac: 'N/A', power: 'Normal', cleanliness: 'Audited' }
+  ];
+
+  let activeCoachCode = 'KA';
+
+  // Render all 8 features function
+  function renderAllTrainManagerFeatures() {
+    // 1. FEATURE 1: View Assigned Train Details
+    const headerTitle = document.getElementById('tmAssignedTrainHeader');
+    if (headerTitle) headerTitle.textContent = `${activeTrain.name} (${activeTrain.id})`;
+
+    const trainIdDisplay = document.getElementById('tmTrainIdDisplay');
+    const trainSource = document.getElementById('tmTrainSource');
+    const trainDest = document.getElementById('tmTrainDest');
+    const trainDept = document.getElementById('tmTrainDept');
+    const trainArr = document.getElementById('tmTrainArr');
+    const trainDuration = document.getElementById('tmTrainDuration');
+    const trainPlatform = document.getElementById('tmTrainPlatform');
+    const trainOffDay = document.getElementById('tmTrainOffDay');
+    const trainFare = document.getElementById('tmTrainFare');
+    const trainTypeBadge = document.getElementById('tmTrainTypeBadge');
+
+    if (trainIdDisplay) trainIdDisplay.textContent = activeTrain.id;
+    if (trainSource) trainSource.textContent = activeTrain.source || assignedStation;
+    if (trainDest) trainDest.textContent = activeTrain.destination || 'Chattogram Junction';
+    if (trainDept) trainDept.textContent = activeTrain.departure || '07:00 AM';
+    if (trainArr) trainArr.textContent = activeTrain.arrival || '12:15 PM';
+    if (trainDuration) trainDuration.textContent = activeTrain.duration || '5h 15m';
+    if (trainPlatform) trainPlatform.textContent = activeTrain.platform || 'Platform #1';
+    if (trainOffDay) trainOffDay.textContent = activeTrain.offDay || 'Saturday';
+    if (trainFare) trainFare.textContent = formatBDT(activeTrain.fare || 650);
+    if (trainTypeBadge) trainTypeBadge.textContent = activeTrain.type || 'Intercity Express';
+
+    // 11 Summary Cards Binding
+    const totalCap = coachesData.reduce((acc, c) => acc + c.totalSeats, 0);
+    const totalBooked = coachesData.reduce((acc, c) => acc + c.bookedSeats, 0);
+    const avail = totalCap - totalBooked;
+    const currentDelay = activeTrain.delayMinutes || 0;
+
+    const cardAssignedTrain = document.getElementById('tmCardAssignedTrain');
+    const cardTrainId = document.getElementById('tmCardTrainId');
+    const cardStatus = document.getElementById('tmCardStatus');
+    const cardCoaches = document.getElementById('tmCardCoaches');
+    const cardSeats = document.getElementById('tmCardSeats');
+    const cardAvailSeats = document.getElementById('tmCardAvailSeats');
+    const cardOccSeats = document.getElementById('tmCardOccSeats');
+    const cardPassengers = document.getElementById('tmCardPassengers');
+    const cardNextStation = document.getElementById('tmCardNextStation');
+    const cardDeptTime = document.getElementById('tmCardDeptTime');
+    const cardSourceStation = document.getElementById('tmCardSourceStation');
+    const cardArrTime = document.getElementById('tmCardArrTime');
+    const cardDestStation = document.getElementById('tmCardDestStation');
+    const cardDelayStatus = document.getElementById('tmCardDelayStatus');
+
+    if (cardAssignedTrain) cardAssignedTrain.textContent = activeTrain.name;
+    if (cardTrainId) cardTrainId.textContent = activeTrain.id;
+    if (cardStatus) cardStatus.textContent = activeTrain.status || 'Operational';
+    if (cardCoaches) cardCoaches.textContent = `${coachesData.length} Coaches`;
+    if (cardSeats) cardSeats.textContent = `${totalCap} Total Seats`;
+    if (cardAvailSeats) cardAvailSeats.textContent = `${avail} Seats`;
+    if (cardOccSeats) cardOccSeats.textContent = `${totalBooked} Booked`;
+    if (cardPassengers) cardPassengers.textContent = `${totalBooked} Passengers`;
+
+    // Dynamic Next Station Calculation based on route
+    const isChattogramRoute = (activeTrain.destination || '').includes('Chattogram') || (activeTrain.source || '').includes('Chattogram');
+    const isSylhetRoute = (activeTrain.destination || '').includes('Sylhet');
+    const isCoxRoute = (activeTrain.destination || '').includes('Cox');
+    const nextStopName = isCoxRoute ? 'Chattogram Junction' : (isSylhetRoute ? 'Brahmanbaria' : (isChattogramRoute ? 'Bhairab Bazar' : 'Joydebpur Junction'));
+
+    if (cardNextStation) cardNextStation.textContent = nextStopName;
+    if (cardDeptTime) cardDeptTime.textContent = activeTrain.departure || '07:00 AM';
+    if (cardSourceStation) cardSourceStation.textContent = activeTrain.source || 'Dhaka (Kamalapur)';
+    if (cardArrTime) cardArrTime.textContent = activeTrain.arrival || '12:15 PM';
+    if (cardDestStation) cardDestStation.textContent = activeTrain.destination || 'Chattogram Junction';
+    if (cardDelayStatus) {
+      cardDelayStatus.textContent = currentDelay > 0 ? `+${currentDelay} min delay` : 'On Time (0 min)';
+      cardDelayStatus.className = currentDelay > 0 ? 'text-lg font-black text-amber-400' : 'text-lg font-black text-emerald-400';
+    }
+
+    // Top Overview Ribbon Metrics
+    const metricStatus = document.getElementById('tmMetricStatus');
+    const metricRoute = document.getElementById('tmMetricRoute');
+    const metricDelay = document.getElementById('tmMetricDelay');
+    const metricEstDept = document.getElementById('tmMetricEstDept');
+
+    if (metricStatus) metricStatus.textContent = activeTrain.status || 'Operational';
+    if (metricRoute) metricRoute.textContent = `${activeTrain.source || 'Dhaka'} ? ${activeTrain.destination || 'Chattogram'}`;
+    if (metricDelay) {
+      metricDelay.textContent = currentDelay > 0 ? `+${currentDelay} Min Delay` : 'On Time (0 min)';
+      metricDelay.className = currentDelay > 0 ? 'text-base sm:text-lg font-bold text-amber-400' : 'text-base sm:text-lg font-bold text-emerald-400';
+    }
+    if (metricEstDept) metricEstDept.textContent = `Scheduled: ${activeTrain.departure || '07:00 AM'}`;
+
+    // TRAIN JOURNEY / ROUTE FLOW (Feature: Vertical sequence with downward arrows ?)
+    renderTrainJourneyRouteFlow();
+
+    // 2. FEATURE 2: Train Status Management Form
+    const statusSelect = document.getElementById('tmStatusSelect');
+    if (statusSelect && activeTrain.status) {
+      statusSelect.value = activeTrain.status;
+    }
+
+    // 4. FEATURE 4: Update Train Delay
+    const delayBadge = document.getElementById('tmDelayBadge');
+    const delayMinutesInput = document.getElementById('tmDelayMinutes');
+    const estDeptTime = document.getElementById('tmEstDeptTime');
+
+    if (delayBadge) {
+      delayBadge.textContent = currentDelay > 0 ? `+${currentDelay} Min Delay` : 'On Time';
+    }
+    if (delayMinutesInput) {
+      delayMinutesInput.value = currentDelay;
+    }
+    if (estDeptTime) {
+      estDeptTime.textContent = calculateRevisedTime(activeTrain.departure || '07:00 AM', currentDelay);
+    }
+
+    // 5 & 6. FEATURES 5 & 6: View Coaches & Live Seat Status
+    renderCoachTabsAndSeats();
+
+    // 7. FEATURE 7: Train Occupancy Analytics
+    renderOccupancyAnalytics();
+
+    // 8. FEATURE 8: Render Emergency Dispatch History
+    renderTrainManagerEmergencies();
+  }
+
+  // Render Train Manager Emergency Incidents Table
+  function renderTrainManagerEmergencies() {
+    const tbody = document.getElementById('tmEmergenciesTableBody');
+    if (!tbody) return;
+
+    const emergencies = JSON.parse(localStorage.getItem('emergencies') || '[]');
+    // Show emergencies for this train or recent ones
+    const trainEmg = emergencies.filter(e => e.trainId === activeTrain.id || emergencies.length <= 4);
+
+    if (trainEmg.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-slate-400">No emergency incidents or alerts dispatched for this train.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = trainEmg.map(e => {
+      let sevBadge = 'bg-amber-500/20 text-amber-300 border border-amber-500/40';
+      if (e.severity && (e.severity.includes('Critical') || e.severity.includes('Immediate'))) {
+        sevBadge = 'bg-rose-500/20 text-rose-300 border border-rose-500/50 font-black';
+      }
+
+      let statusBadge = e.status === 'Resolved' 
+        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' 
+        : (e.status === 'Acknowledged' 
+            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' 
+            : 'bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse');
+
+      return `
+        <tr class="border-b border-slate-700/50 hover:bg-slate-900/30">
+          <td class="py-2.5"><strong class="font-mono text-rose-400 font-bold">${e.id}</strong></td>
+          <td>
+            <div class="font-bold text-white">${e.trainName || activeTrain.name}</div>
+            <div class="text-[10px] font-mono text-slate-400">${e.trainId || activeTrain.id}</div>
+          </td>
+          <td class="font-semibold text-slate-200">${e.type}</td>
+          <td><span class="px-2 py-0.5 rounded text-[10px] ${sevBadge}">${e.severity}</span></td>
+          <td class="text-slate-300 font-medium">${e.location}</td>
+          <td class="text-slate-400 text-[11px]">${e.reportedAt}</td>
+          <td><span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${statusBadge}">${e.status}</span></td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // Render Train Journey / Route Flow with Downward Arrows (?)
+  function renderTrainJourneyRouteFlow() {
+    const container = document.getElementById('tmJourneyRouteFlow');
+    if (!container) return;
+
+    let routeStops = [];
+    const src = activeTrain.source || 'Dhaka (Kamalapur)';
+    const dst = activeTrain.destination || 'Chattogram Junction';
+
+    if (dst.includes('Cox') || src.includes('Cox')) {
+      routeStops = [
+        { name: 'Dhaka (Kamalapur)', type: 'Origin', time: activeTrain.departure || '06:30 AM', platform: 'Platform #3', status: 'Departed', distance: '0 km' },
+        { name: 'Dhaka Airport', type: 'Stoppage', time: '07:05 AM', platform: 'Platform #2', status: 'Departed', distance: '21 km' },
+        { name: 'Chattogram Junction', type: 'Major Junction', time: '11:45 AM', platform: 'Platform #1', status: 'Next Stop / En Route', distance: '320 km' },
+        { name: 'Dohazari', type: 'Stoppage', time: '01:15 PM', platform: 'Platform #1', status: 'Scheduled', distance: '365 km' },
+        { name: 'Cox\'s Bazar Station', type: 'Destination', time: activeTrain.arrival || '03:00 PM', platform: 'Platform #1', status: 'Scheduled', distance: '535 km' }
+      ];
+    } else if (dst.includes('Sylhet') || src.includes('Sylhet')) {
+      routeStops = [
+        { name: 'Dhaka (Kamalapur)', type: 'Origin', time: activeTrain.departure || '06:40 AM', platform: 'Platform #4', status: 'Departed', distance: '0 km' },
+        { name: 'Dhaka Airport', type: 'Stoppage', time: '07:15 AM', platform: 'Platform #1', status: 'Departed', distance: '21 km' },
+        { name: 'Bhairab Bazar', type: 'Junction', time: '08:45 AM', platform: 'Platform #2', status: 'Next Stop / En Route', distance: '85 km' },
+        { name: 'Brahmanbaria', type: 'Stoppage', time: '09:30 AM', platform: 'Platform #1', status: 'Scheduled', distance: '120 km' },
+        { name: 'Sreemangal', type: 'Stoppage', time: '11:15 AM', platform: 'Platform #1', status: 'Scheduled', distance: '235 km' },
+        { name: 'Sylhet Station', type: 'Destination', time: activeTrain.arrival || '01:20 PM', platform: 'Platform #2', status: 'Scheduled', distance: '319 km' }
+      ];
+    } else if (dst.includes('Rajshahi') || src.includes('Rajshahi')) {
+      routeStops = [
+        { name: 'Dhaka (Kamalapur)', type: 'Origin', time: activeTrain.departure || '02:40 PM', platform: 'Platform #5', status: 'Departed', distance: '0 km' },
+        { name: 'Dhaka Airport', type: 'Stoppage', time: '03:15 PM', platform: 'Platform #2', status: 'Departed', distance: '21 km' },
+        { name: 'Joydebpur Junction', type: 'Junction', time: '03:50 PM', platform: 'Platform #1', status: 'Next Stop / En Route', distance: '35 km' },
+        { name: 'Ishwardi Bypass', type: 'Junction', time: '06:30 PM', platform: 'Platform #2', status: 'Scheduled', distance: '210 km' },
+        { name: 'Rajshahi Station', type: 'Destination', time: activeTrain.arrival || '08:30 PM', platform: 'Platform #1', status: 'Scheduled', distance: '343 km' }
+      ];
+    } else {
+      // Default: Dhaka - Chattogram Main Line
+      routeStops = [
+        { name: 'Dhaka (Kamalapur)', type: 'Origin Station', time: activeTrain.departure || '07:00 AM', platform: activeTrain.platform || 'Platform #1', status: 'Departed', distance: '0 km' },
+        { name: 'Dhaka Airport', type: 'Passenger Halt', time: '07:35 AM', platform: 'Platform #2', status: 'Departed', distance: '21 km' },
+        { name: 'Bhairab Bazar', type: 'Railway Junction', time: '08:50 AM', platform: 'Platform #1', status: 'Next Stop / En Route', distance: '85 km' },
+        { name: 'Cumilla', type: 'Major Stoppage', time: '10:15 AM', platform: 'Platform #2', status: 'Scheduled', distance: '190 km' },
+        { name: 'Feni Junction', type: 'Railway Junction', time: '11:10 AM', platform: 'Platform #1', status: 'Scheduled', distance: '255 km' },
+        { name: 'Chattogram Junction', type: 'Destination Terminal', time: activeTrain.arrival || '12:15 PM', platform: 'Platform #3', status: 'Scheduled', distance: '320 km' }
+      ];
+    }
+
+    container.innerHTML = routeStops.map((stop, idx) => {
+      const isLast = (idx === routeStops.length - 1);
+      const isEnRoute = stop.status.includes('En Route');
+      const isDeparted = stop.status === 'Departed';
+
+      let statusBadge = 'bg-slate-700/60 text-slate-300 border-slate-600';
+      if (isDeparted) statusBadge = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+      if (isEnRoute) statusBadge = 'bg-cyan-500/20 text-cyan-300 border-cyan-400/50 animate-pulse';
+
+      return `
+        <div class="flex flex-col items-center">
+          <div class="w-full bg-slate-900/80 border ${isEnRoute ? 'border-cyan-400/60 shadow-lg shadow-cyan-500/10' : 'border-slate-700/70'} rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div class="flex items-center gap-3">
+              <div class="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${isDeparted ? 'bg-emerald-600 text-white' : (isEnRoute ? 'bg-cyan-500 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700')}">
+                ${idx + 1}
+              </div>
+              <div>
+                <div class="font-bold text-sm text-white flex items-center gap-2">
+                  <span>${stop.name}</span>
+                  <span class="text-[11px] font-normal text-slate-400">(${stop.type})</span>
+                </div>
+                <div class="text-xs text-slate-400 flex items-center gap-3 mt-0.5">
+                  <span>?? ${stop.time}</span>
+                  <span> ${stop.platform}</span>
+                  <span>??? ${stop.distance}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 self-end sm:self-auto">
+              <span class="px-2.5 py-1 text-[11px] font-bold rounded-lg border ${statusBadge}">
+                ${isEnRoute ? '?¡ ' : ''}${stop.status}
+              </span>
+            </div>
+          </div>
+
+          ${!isLast ? `
+            <div class="my-1.5 flex flex-col items-center justify-center">
+              <div class="w-0.5 h-3 bg-gradient-to-b from-cyan-500 to-slate-700"></div>
+              <div class="text-cyan-400 font-bold text-base leading-none py-0.5">?</div>
+              <div class="w-0.5 h-3 bg-gradient-to-b from-slate-700 to-cyan-500"></div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Calculate revised departure time helper
+  function calculateRevisedTime(timeStr, delayMins) {
+    if (!delayMins || delayMins === 0) return `${timeStr} (On Time)`;
+    return `${timeStr} + ${delayMins}m buffer`;
+  }
+
+  // Render Coach Tabs & Interactive Seats (Features 5 & 6)
+  function renderCoachTabsAndSeats() {
+    const tabsContainer = document.getElementById('tmCoachTabs');
+    const coachInfoContainer = document.getElementById('tmSelectedCoachInfo');
+    const seatMapGrid = document.getElementById('tmSeatMapGrid');
+
+    if (!tabsContainer || !seatMapGrid) return;
+
+    // Tabs
+    tabsContainer.innerHTML = coachesData.map(c => `
+      <button type="button" onclick="selectCoach('${c.code}')" class="px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${c.code === activeCoachCode ? 'bg-cyan-500 text-white shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800'}">
+        ${c.code}
+      </button>
+    `).join('');
+
+    const currentCoach = coachesData.find(c => c.code === activeCoachCode) || coachesData[0];
+
+    // Info header
+    if (coachInfoContainer) {
+      coachInfoContainer.innerHTML = `
+        <div class="flex items-center gap-3">
+          <span class="font-bold text-white text-sm">Coach ${currentCoach.code}:</span>
+          <span class="text-cyan-300 font-semibold">${currentCoach.class}</span>
+        </div>
+        <div class="flex items-center gap-4 text-slate-300">
+          <span>AC: <strong class="text-emerald-400">${currentCoach.ac}</strong></span>
+          <span>Power: <strong class="text-emerald-400">${currentCoach.power}</strong></span>
+          <span>Hygiene: <strong class="text-emerald-400">${currentCoach.cleanliness}</strong></span>
+          <span>Capacity: <strong class="text-white font-mono">${currentCoach.bookedSeats}/${currentCoach.totalSeats}</strong></span>
+        </div>
+      `;
+    }
+
+    // Interactive Seat Grid (Feature 6)
+    let seatsHtml = '';
+    for (let i = 1; i <= currentCoach.totalSeats; i++) {
+      const isBooked = i <= currentCoach.bookedSeats;
+      const isVip = (i === 1 || i === 2);
+      
+      let seatClass = 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/20';
+      let statusText = 'Available for booking';
+      
+      if (isVip) {
+        seatClass = 'bg-purple-500/20 border-purple-400/50 text-purple-200 hover:bg-purple-500/30';
+        statusText = 'Reserved (Railway Official / VIP)';
+      } else if (isBooked) {
+        seatClass = 'bg-sky-500/20 border-sky-400/50 text-sky-200 hover:bg-sky-500/30';
+        statusText = `Booked (Ticket #TKT-89${i})`;
+      }
+
+      seatsHtml += `
+        <button type="button" onclick="inspectSeat('${currentCoach.code}', ${i}, '${statusText}')" class="p-2 text-center rounded-lg border font-mono font-bold text-xs transition-all cursor-pointer ${seatClass}" title="Seat ${currentCoach.code}-${i}: ${statusText}">
+          ${currentCoach.code}-${i}
+        </button>
+      `;
+    }
+    seatMapGrid.innerHTML = seatsHtml;
+  }
+
+  // Feature 7: Occupancy Analytics
+  function renderOccupancyAnalytics() {
+    const totalCap = coachesData.reduce((acc, c) => acc + c.totalSeats, 0);
+    const totalBooked = coachesData.reduce((acc, c) => acc + c.bookedSeats, 0);
+    const avail = totalCap - totalBooked;
+    const occRate = ((totalBooked / totalCap) * 100).toFixed(1);
+
+    const occPercentText = document.getElementById('tmOccPercentText');
+    const occProgressBar = document.getElementById('tmOccProgressBar');
+    const occBookedCount = document.getElementById('tmOccBookedCount');
+    const occAvailCount = document.getElementById('tmOccAvailCount');
+    const occTotalCount = document.getElementById('tmOccTotalCount');
+    const metricOccupancy = document.getElementById('tmMetricOccupancy');
+    const metricSeatsCount = document.getElementById('tmMetricSeatsCount');
+
+    if (occPercentText) occPercentText.textContent = `${occRate}% Occupied`;
+    if (occProgressBar) occProgressBar.style.width = `${occRate}%`;
+    if (occBookedCount) occBookedCount.textContent = totalBooked;
+    if (occAvailCount) occAvailCount.textContent = avail;
+    if (occTotalCount) occTotalCount.textContent = `${totalCap} Seats`;
+    if (metricOccupancy) metricOccupancy.textContent = `${occRate}% Booked`;
+    if (metricSeatsCount) metricSeatsCount.textContent = `${totalBooked} / ${totalCap} Seats`;
+  }
+
+  // Global window functions for Coach Selection and Seat Inspection
+  window.selectCoach = function(code) {
+    activeCoachCode = code;
+    renderCoachTabsAndSeats();
+  };
+
+  window.inspectSeat = function(coach, seatNum, status) {
+    showToast(`Seat ${coach}-${seatNum}: ${status}`, 'info');
+  };
+
+  // Form Submissions:
+  // 1. Train Status Form (Feature 2)
+  const statusForm = document.getElementById('tmStatusUpdateForm');
+  if (statusForm && !statusForm.dataset.bound) {
+    statusForm.dataset.bound = 'true';
+    statusForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const newStatus = document.getElementById('tmStatusSelect').value;
+      const note = document.getElementById('tmStatusNote').value.trim();
+
+      // Call real backend API
+      apiCall('PUT', `/api/manager/trains/${encodeURIComponent(activeTrain.id)}/status`, {
+        status: newStatus.toUpperCase(),
+        cause: note
+      }).catch(() => {});
+
+      activeTrain.status = newStatus;
+      const allTrains = JSON.parse(localStorage.getItem('trains') || '[]');
+      const tIdx = allTrains.findIndex(t => t.id === activeTrain.id);
+      if (tIdx !== -1) {
+        allTrains[tIdx].status = newStatus;
+        if (newStatus === 'Delayed' && (!allTrains[tIdx].delayMinutes || allTrains[tIdx].delayMinutes === 0)) {
+          allTrains[tIdx].delayMinutes = 15;
+          activeTrain.delayMinutes = 15;
+        }
+        localStorage.setItem('trains', JSON.stringify(allTrains));
+      }
+
+      if (newStatus === 'Delayed' || newStatus === 'Cancelled') {
+        dispatchPassengerDelayNotification(activeTrain.id, activeTrain.delayMinutes || 15, `Train Operational Status: ${newStatus}`);
+      }
+
+      const statusModal = document.getElementById('tmStatusModalOverlay');
+      if (statusModal) statusModal.classList.remove('active');
+
+      const lastStatusEl = document.getElementById('tmLastStatusUpdate');
+      if (lastStatusEl) {
+        const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        lastStatusEl.textContent = `Today, ${timeNow} (${newStatus})`;
+      }
+
+      renderAllTrainManagerFeatures();
+      showToast(`Train status updated to "${newStatus}"! Broadcasted to central station board.`, 'success');
+    });
+  }
+
+  // 2. Train Delay Form (Feature 4)
+  const delayForm = document.getElementById('tmDelayForm');
+  if (delayForm && !delayForm.dataset.bound) {
+    delayForm.dataset.bound = 'true';
+    delayForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const delayMins = parseInt(document.getElementById('tmDelayMinutes').value || '0', 10);
+      const reason = document.getElementById('tmDelayReason').value;
+
+      // Call real backend API
+      apiCall('PUT', `/api/manager/trains/${encodeURIComponent(activeTrain.id)}/delay`, {
+        delay_minutes: delayMins,
+        reason: reason
+      }).catch(() => {});
+
+      activeTrain.delayMinutes = delayMins;
+      activeTrain.delayReason = reason;
+      const allTrains = JSON.parse(localStorage.getItem('trains') || '[]');
+      const tIdx = allTrains.findIndex(t => t.id === activeTrain.id);
+      if (tIdx !== -1) {
+        allTrains[tIdx].delayMinutes = delayMins;
+        allTrains[tIdx].delayReason = reason;
+        if (delayMins > 0) {
+          allTrains[tIdx].status = 'Delayed';
+          activeTrain.status = 'Delayed';
+        } else if (allTrains[tIdx].status === 'Delayed') {
+          allTrains[tIdx].status = 'Operational';
+          activeTrain.status = 'Operational';
+        }
+        localStorage.setItem('trains', JSON.stringify(allTrains));
+      }
+
+      // Dispatch alert notifications to all passengers who booked this train
+      const notifiedCount = dispatchPassengerDelayNotification(activeTrain.id, delayMins, reason);
+
+      const delayModal = document.getElementById('tmDelayModalOverlay');
+      if (delayModal) delayModal.classList.remove('active');
+
+      renderAllTrainManagerFeatures();
+      showToast(`Schedule delay updated to +${delayMins} mins (${reason}). ${notifiedCount} booked passenger(s) notified!`, 'success');
+    });
+  }
+
+  // 4. Emergency Broadcast Form (Feature 8)
+  const emergForm = document.getElementById('tmEmergencyForm');
+  if (emergForm && !emergForm.dataset.bound) {
+    emergForm.dataset.bound = 'true';
+    emergForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const type = document.getElementById('tmEmergType').value;
+      const severity = document.getElementById('tmEmergSeverity').value;
+      const location = document.getElementById('tmEmergLocation').value.trim();
+      const desc = document.getElementById('tmEmergDesc').value.trim();
+
+      if (!location || !desc) {
+        showToast('Please state the emergency location and details.', 'danger');
+        return;
+      }
+
+      // Call real backend API
+      apiCall('POST', '/api/manager/incidents', {
+        train_id: activeTrain.id,
+        incident_type: type,
+        priority: severity.includes('Critical') ? 'CRITICAL' : 'HIGH',
+        description: `Location: ${location}. Details: ${desc}`
+      }).catch(() => {});
+
+      const newEmergency = {
+        id: `EMG-${Math.floor(200 + Math.random() * 800)}`,
+        trainId: activeTrain.id,
+        trainName: activeTrain.name,
+        type: type,
+        severity: severity,
+        location: location,
+        description: desc,
+        reportedBy: `${currentUser.name || 'Train Manager'} (Train Manager)`,
+        reportedAt: 'Just now',
+        status: 'Active'
+      };
+
+      const emergencies = JSON.parse(localStorage.getItem('emergencies') || '[]');
+      emergencies.unshift(newEmergency);
+      localStorage.setItem('emergencies', JSON.stringify(emergencies));
+
+      // Broadcast to system notifications
+      const notifs = JSON.parse(localStorage.getItem('system_notifications') || '[]');
+      notifs.unshift({
+        id: `NOTIF-${Date.now()}`,
+        type: 'emergency',
+        title: `¨ EMERGENCY ALERT: ${activeTrain.name} (${activeTrain.id})`,
+        message: `${type} at ${location}. Severity: ${severity}. Control HQ & Station Master dispatched.`,
+        timestamp: new Date().toISOString(),
+        timeStr: 'Just now',
+        read: false
+      });
+      localStorage.setItem('system_notifications', JSON.stringify(notifs));
+
+      const emergModal = document.getElementById('tmEmergencyModalOverlay');
+      if (emergModal) emergModal.classList.remove('active');
+      emergForm.reset();
+
+      renderTrainManagerEmergencies();
+      showToast(`¨ HIGH PRIORITY EMERGENCY DISPATCHED: #${newEmergency.id} (${type} at ${location}) sent to Central Control HQ!`, 'danger');
+    });
+  }
+
+  // 5. Train Schedule Update Request Modal Handler
+  const openSchedBtn = document.getElementById('openScheduleModalBtn');
+  const schedModalOverlay = document.getElementById('tmScheduleModalOverlay');
+  const schedUpdateForm = document.getElementById('tmScheduleUpdateModalForm');
+
+  if (openSchedBtn && schedModalOverlay && !openSchedBtn.dataset.bound) {
+    openSchedBtn.dataset.bound = 'true';
+    openSchedBtn.addEventListener('click', () => {
+      const trainNameField = document.getElementById('tmSchedTrainName');
+      if (trainNameField) trainNameField.value = `${activeTrain.name} (${activeTrain.id})`;
+      const timesDisp = document.getElementById('tmSchedDispTimes');
+      if (timesDisp) timesDisp.textContent = `${activeTrain.departure || '07:00 AM'} ? ${activeTrain.arrival || '12:15 PM'}`;
+      const routeDisp = document.getElementById('tmSchedDispRoute');
+      if (routeDisp) routeDisp.textContent = `${activeTrain.source || assignedStation || 'Dhaka'} ? ${activeTrain.destination || 'Chattogram'}`;
+      const platDisp = document.getElementById('tmSchedDispPlatform');
+      if (platDisp) platDisp.textContent = activeTrain.platform || 'Platform #1';
+
+      schedModalOverlay.classList.add('active');
+    });
+  }
+
+  if (schedUpdateForm && !schedUpdateForm.dataset.bound) {
+    schedUpdateForm.dataset.bound = 'true';
+    schedUpdateForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const requestedChange =
+        document.getElementById('tmSchedRequestedChange').value.trim();
+
+      const reason =
+        document.getElementById('tmSchedReason').value.trim();
+
+      if (!requestedChange) {
+        showToast(
+          'Please describe the requested schedule change.',
+          'danger'
+        );
+        return;
+      }
+
+      const result = await apiCall(
+        'POST',
+        '/api/manager/schedule-requests',
+        {
+          train_id: activeTrain.id,
+          schedule_id:
+            activeTrain.scheduleId ||
+            activeTrain.schedule_id ||
+            null,
+          requested_change: requestedChange,
+          reason: reason
+        }
+      );
+
+      if (!result.ok) {
+        showToast(
+          result.error ||
+          'Failed to submit schedule update request.',
+          'danger'
+        );
+        return;
+      }
+
+      const requestId =
+        result.data?.request_id ||
+        result.data?.REQUEST_ID ||
+        'new request';
+
+      schedModalOverlay.classList.remove('active');
+      schedUpdateForm.reset();
+
+      showToast(
+        `Schedule update request ${requestId} submitted for ${activeTrain.name} (Status: Pending)!`,
+        'success'
+      );
+
+      // Do not refresh the CRUD schedule manager here.
+      // The request was already saved to SCHEDULE_UPDATE_REQUEST.
+    });
+  }
+
+  // Initial render
+  renderAllTrainManagerFeatures();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,4227 @@
+# ============================================================
+# JATRA RAILWAY MANAGEMENT SYSTEM
+# Flask Backend - Oracle XE 11g
+# ============================================================
+
+import os
+import uuid
+from datetime import datetime, date
+
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from dotenv import load_dotenv
+from functools import wraps
+
+from db import (
+    OracleConnection,
+    test_connection,
+    init_oracle_client,
+)
+
+from auth_utils import (
+    hash_password,
+    check_password,
+    generate_token,
+    get_current_user,
+    require_auth,
+    require_role,
+    ROLE_PASSENGER,
+    ROLE_ADMIN,
+    ROLE_TRAIN_MANAGER,
+    ROLE_STATION_MASTER,
+    ROLE_TICKET_MANAGER,
+    DB_TO_FRONTEND_ROLE,
+)
+
+
+# ============================================================
+# 1. INITIALIZATION
+# ============================================================
+
+load_dotenv()
+
+app = Flask(__name__)
+
+CORS(
+    app,
+    resources={
+        r"/api/*": {
+            "origins": [
+                "http://localhost:5500",
+                "http://127.0.0.1:5500",
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
+                "http://localhost:3000",
+                "http://127.0.0.1:3000",
+                "http://localhost:8000",
+                "http://127.0.0.1:8000",
+            ]
+        }
+    },
+    supports_credentials=True,
+)
+
+try:
+    init_oracle_client()
+    print("[DB] Oracle Client initialized successfully")
+except Exception as e:
+    print(f"[DB] Oracle initialization warning: {e}")
+
+
+# ============================================================
+# 2. UTILITY FUNCTIONS
+# ============================================================
+
+def generate_id(prefix):
+    return f"{prefix}-{uuid.uuid4().hex[:16].upper()}"
+
+
+def rows_to_dicts(cursor):
+    columns = [col[0].lower() for col in cursor.description]
+    return [
+        dict(zip(columns, row))
+        for row in cursor.fetchall()
+    ]
+
+
+def row_to_dict(cursor, row):
+    if row is None:
+        return None
+
+    columns = [
+        col[0].lower()
+        for col in cursor.description
+    ]
+
+    return dict(zip(columns, row))
+
+
+def json_safe(value):
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+
+    if isinstance(value, bytes):
+        return value.decode(
+            "utf-8",
+            errors="ignore"
+        )
+
+    return value
+
+
+def clean_dict(data):
+    if isinstance(data, dict):
+        return {
+            key: clean_dict(value)
+            for key, value in data.items()
+        }
+
+    if isinstance(data, list):
+        return [
+            clean_dict(value)
+            for value in data
+        ]
+
+    return json_safe(data)
+
+
+def get_json():
+    return request.get_json(silent=True) or {}
+
+
+def first_value(data, *keys, default=None):
+    for key in keys:
+        if key in data and data[key] is not None:
+            return data[key]
+
+    return default
+
+
+def get_current_user_safe():
+    try:
+        return get_current_user()
+    except Exception:
+        return None
+
+
+def get_user_id(current_user):
+    if not current_user:
+        return None
+
+    return (
+        current_user.get("user_id")
+        or current_user.get("userId")
+        or current_user.get("id")
+    )
+
+
+def get_user_role(current_user):
+    if not current_user:
+        return None
+
+    return (
+        current_user.get("role")
+        or current_user.get("user_type")
+        or current_user.get("userType")
+    )
+def role_required(required_role):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            current_user = get_current_user_safe()
+
+            if not current_user:
+                return jsonify({
+                    "error": "Authentication required"
+                }), 401
+
+            user_role = get_user_role(current_user)
+
+            if user_role != required_role:
+                return jsonify({
+                    "error": "Access denied",
+                    "required_role": required_role,
+                    "your_role": user_role
+                }), 403
+
+            return f(*args, **kwargs)
+
+        return wrapper
+    return decorator
+
+def db_role_to_frontend_role(db_role):
+    if not db_role:
+        return None
+
+    return DB_TO_FRONTEND_ROLE.get(
+        db_role,
+        str(db_role).lower()
+    )
+
+
+# ============================================================
+# 3. HEALTH CHECK
+# ============================================================
+
+@app.route("/api/health", methods=["GET"])
+def health():
+    try:
+        test_connection()
+
+        return jsonify({
+            "status": "ok",
+            "service": "JATRA Railway Management API",
+            "database": "connected",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "service": "JATRA Railway Management API",
+            "database": "disconnected",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }), 500
+
+
+# ============================================================
+# 4. LOGIN
+# ============================================================
+
+@app.route("/api/login", methods=["POST"])
+@app.route("/api/auth/login", methods=["POST"])
+def login():
+
+    data = get_json()
+
+    email = str(
+        first_value(
+            data,
+            "email",
+            "username",
+            default=""
+        )
+    ).strip().lower()
+
+    password = str(
+        first_value(
+            data,
+            "password",
+            default=""
+        )
+    )
+
+    if not email or not password:
+        return jsonify({
+            "error": "Email and password are required."
+        }), 400
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT
+                    u.user_id,
+                    u.email,
+                    u.password,
+                    u.user_type,
+                    u.first_name,
+                    u.middle_name,
+                    u.last_name,
+                    u.gender,
+                    u.nid,
+                    u.city,
+                    u.house_no,
+                    u.post_code,
+                    u.date_of_birth,
+
+                    (
+                        SELECT MIN(up.phone_number)
+                        FROM USER_PHONE_NUMBER up
+                        WHERE up.user_id = u.user_id
+                    ) AS phone_number
+
+                FROM APP_USER u
+
+                WHERE LOWER(u.email) = :email
+                """,
+                {
+                    "email": email
+                }
+            )
+
+            row = cursor.fetchone()
+
+            if not row:
+                return jsonify({
+                    "error": "Invalid email or password."
+                }), 401
+
+            columns = [
+                col[0].lower()
+                for col in cursor.description
+            ]
+
+            user = dict(zip(columns, row))
+
+            stored_password = user.get("password")
+
+            if not stored_password:
+                return jsonify({
+                    "error": "User password is not configured."
+                }), 500
+
+            if not check_password(
+                password,
+                stored_password
+            ):
+                return jsonify({
+                    "error": "Invalid email or password."
+                }), 401
+
+            db_role = user.get("user_type")
+
+            frontend_role = db_role_to_frontend_role(
+                db_role
+            )
+
+            full_name = " ".join(
+                part
+                for part in [
+                    user.get("first_name"),
+                    user.get("middle_name"),
+                    user.get("last_name")
+                ]
+                if part
+            )
+
+            token = generate_token(
+                user["user_id"],
+                db_role,
+                full_name
+            )
+
+            user_data = {
+                "user_id": user["user_id"],
+                "email": user["email"],
+                "user_type": db_role,
+                "role": frontend_role,
+                "first_name": user["first_name"],
+                "middle_name": user["middle_name"],
+                "last_name": user["last_name"],
+                "gender": user["gender"],
+                "nid": user["nid"],
+                "city": user["city"],
+                "house_no": user["house_no"],
+                "post_code": user["post_code"],
+                "date_of_birth": json_safe(
+                    user["date_of_birth"]
+                ),
+                "phone_number": user["phone_number"],
+            }
+
+            return jsonify({
+                "message": "Login successful.",
+                "token": token,
+                "user": user_data,
+            }), 200
+
+    except Exception as e:
+        print(f"[LOGIN ERROR] {e}")
+
+        return jsonify({
+            "error": "Login failed due to a server error.",
+            "details": str(e),
+        }), 500
+
+
+# ============================================================
+# 5. REGISTER PASSENGER
+# ============================================================
+
+@app.route("/api/register", methods=["POST"])
+@app.route("/api/auth/register", methods=["POST"])
+def register():
+
+    data = get_json()
+
+    email = str(
+        first_value(
+            data,
+            "email",
+            default=""
+        )
+    ).strip().lower()
+
+    password = str(
+        first_value(
+            data,
+            "password",
+            default=""
+        )
+    )
+
+    first_name = str(
+        first_value(
+            data,
+            "first_name",
+            "firstName",
+            default=""
+        )
+    ).strip()
+
+    middle_name = first_value(
+        data,
+        "middle_name",
+        "middleName",
+        default=None
+    )
+
+    last_name = str(
+        first_value(
+            data,
+            "last_name",
+            "lastName",
+            default=""
+        )
+    ).strip()
+
+    gender = first_value(
+        data,
+        "gender",
+        default=None
+    )
+
+    nid = str(
+        first_value(
+            data,
+            "nid",
+            "NID",
+            default=""
+        )
+    ).strip()
+
+    city = first_value(
+        data,
+        "city",
+        default=None
+    )
+
+    house_no = first_value(
+        data,
+        "house_no",
+        "houseNo",
+        default=None
+    )
+
+    post_code = first_value(
+        data,
+        "post_code",
+        "postCode",
+        default=None
+    )
+
+    date_of_birth = first_value(
+        data,
+        "date_of_birth",
+        "dateOfBirth",
+        "dob",
+        default=None
+    )
+
+    phone_number = first_value(
+        data,
+        "phone_number",
+        "phone",
+        default=None
+    )
+
+    passenger_type = first_value(
+        data,
+        "passenger_type",
+        "passengerType",
+        default="GENERAL"
+    )
+
+    if not email or not password:
+        return jsonify({
+            "error": "Email and password are required."
+        }), 400
+
+    if not first_name or not last_name:
+        return jsonify({
+            "error": "First name and last name are required."
+        }), 400
+
+    if not nid:
+        return jsonify({
+            "error": "NID is required."
+        }), 400
+
+    if not date_of_birth:
+        return jsonify({
+            "error": "Date of birth is required."
+        }), 400
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT user_id
+                FROM APP_USER
+                WHERE LOWER(email) = :email
+                """,
+                {
+                    "email": email
+                }
+            )
+
+            if cursor.fetchone():
+                return jsonify({
+                    "error": "Email is already registered."
+                }), 409
+
+            cursor.execute(
+                """
+                SELECT user_id
+                FROM APP_USER
+                WHERE nid = :nid
+                """,
+                {
+                    "nid": nid
+                }
+            )
+
+            if cursor.fetchone():
+                return jsonify({
+                    "error": "NID is already registered."
+                }), 409
+
+            user_id = generate_id("USR")
+
+            password_value = hash_password(password)
+
+            # APP_USER
+            cursor.execute(
+                """
+                INSERT INTO APP_USER (
+                    user_id,
+                    email,
+                    password,
+                    user_type,
+                    first_name,
+                    middle_name,
+                    last_name,
+                    gender,
+                    nid,
+                    city,
+                    house_no,
+                    post_code,
+                    date_of_birth
+                )
+                VALUES (
+                    :user_id,
+                    :email,
+                    :password,
+                    'PASSENGER',
+                    :first_name,
+                    :middle_name,
+                    :last_name,
+                    :gender,
+                    :nid,
+                    :city,
+                    :house_no,
+                    :post_code,
+                    TO_DATE(
+                        :date_of_birth,
+                        'YYYY-MM-DD'
+                    )
+                )
+                """,
+                {
+                    "user_id": user_id,
+                    "email": email,
+                    "password": password_value,
+                    "first_name": first_name,
+                    "middle_name": middle_name,
+                    "last_name": last_name,
+                    "gender": gender,
+                    "nid": nid,
+                    "city": city,
+                    "house_no": house_no,
+                    "post_code": post_code,
+                    "date_of_birth": str(
+                        date_of_birth
+                    )[:10],
+                }
+            )
+
+            # PASSENGER
+            cursor.execute(
+                """
+                INSERT INTO PASSENGER (
+                    user_id,
+                    passenger_type
+                )
+                VALUES (
+                    :user_id,
+                    :passenger_type
+                )
+                """,
+                {
+                    "user_id": user_id,
+                    "passenger_type": passenger_type,
+                }
+            )
+
+            # USER PHONE
+            if phone_number:
+
+                cursor.execute(
+                    """
+                    INSERT INTO USER_PHONE_NUMBER (
+                        user_id,
+                        phone_number
+                    )
+                    VALUES (
+                        :user_id,
+                        :phone_number
+                    )
+                    """,
+                    {
+                        "user_id": user_id,
+                        "phone_number": str(
+                            phone_number
+                        ),
+                    }
+                )
+
+            conn.commit()
+
+            # Generate token immediately after registration.
+            full_name = " ".join(
+                part
+                for part in [
+                    first_name,
+                    middle_name,
+                    last_name
+                ]
+                if part
+            )
+
+            token = generate_token(
+                user_id,
+                "PASSENGER",
+                full_name
+            )
+
+            return jsonify({
+                "message": "Registration successful.",
+                "user_id": user_id,
+                "email": email,
+                "token": token,
+                "user": {
+                    "user_id": user_id,
+                    "email": email,
+                    "user_type": "PASSENGER",
+                    "role": "user",
+                    "first_name": first_name,
+                    "middle_name": middle_name,
+                    "last_name": last_name,
+                    "gender": gender,
+                    "nid": nid,
+                    "city": city,
+                    "house_no": house_no,
+                    "post_code": post_code,
+                    "date_of_birth": str(
+                        date_of_birth
+                    )[:10],
+                    "phone_number": phone_number,
+                    "passenger_type": passenger_type,
+                }
+            }), 201
+
+    except Exception as e:
+        print(f"[REGISTER ERROR] {e}")
+
+        return jsonify({
+            "error": "Registration failed due to a server error.",
+            "details": str(e),
+        }), 500
+
+
+# ============================================================
+# 6. STATIONS
+# ============================================================
+
+@app.route("/api/stations", methods=["GET"])
+def stations():
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT
+                    station_id,
+                    station_name,
+                    station_code,
+                    city,
+                    total_platform_number,
+                    status
+                FROM STATION
+                ORDER BY station_name
+                """
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "stations": clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(f"[STATIONS ERROR] {e}")
+
+        return jsonify({
+            "error": "Failed to load stations.",
+            "stations": [],
+        }), 500
+
+# ============================================================
+# 6.1 ADMIN STATION CRUD
+# ============================================================
+
+@app.route("/api/admin/stations", methods=["POST"])
+def create_station():
+    try:
+        data = request.get_json() or {}
+
+        station_id = data.get("station_id")
+        station_name = data.get("station_name")
+        station_code = data.get("station_code")
+        city = data.get("city")
+        total_platform_number = data.get("total_platform_number", 1)
+        status = data.get("status", "ACTIVE")
+
+        if not station_id:
+            return jsonify({"error": "station_id is required"}), 400
+
+        if not station_name:
+            return jsonify({"error": "station_name is required"}), 400
+
+        if not station_code:
+            return jsonify({"error": "station_code is required"}), 400
+
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                INSERT INTO STATION
+                (
+                    STATION_ID,
+                    STATION_NAME,
+                    STATION_CODE,
+                    CITY,
+                    TOTAL_PLATFORM_NUMBER,
+                    STATUS
+                )
+                VALUES
+                (
+                    :1, :2, :3, :4, :5, :6
+                )
+                """,
+                (
+                    station_id,
+                    station_name,
+                    station_code,
+                    city,
+                    total_platform_number,
+                    status
+                )
+            )
+
+            conn.commit()
+
+        return jsonify({
+            "message": "Station created successfully",
+            "station_id": station_id
+        }), 201
+
+    except Exception as e:
+        print(f"[CREATE STATION ERROR] {e}")
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
+@app.route("/api/admin/stations/<station_id>", methods=["PUT"])
+def update_station(station_id):
+    try:
+        data = request.get_json() or {}
+
+        station_name = data.get("station_name")
+        station_code = data.get("station_code")
+        city = data.get("city")
+        total_platform_number = data.get("total_platform_number")
+        status = data.get("status")
+
+        if not station_name:
+            return jsonify({"error": "station_name is required"}), 400
+
+        if not station_code:
+            return jsonify({"error": "station_code is required"}), 400
+
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                UPDATE STATION
+                SET
+                    STATION_NAME = :1,
+                    STATION_CODE = :2,
+                    CITY = :3,
+                    TOTAL_PLATFORM_NUMBER = :4,
+                    STATUS = :5
+                WHERE STATION_ID = :6
+                """,
+                (
+                    station_name,
+                    station_code,
+                    city,
+                    total_platform_number,
+                    status,
+                    station_id
+                )
+            )
+
+            if cursor.rowcount == 0:
+                return jsonify({
+                    "error": "Station not found"
+                }), 404
+
+            conn.commit()
+
+        return jsonify({
+            "message": "Station updated successfully",
+            "station_id": station_id
+        }), 200
+
+    except Exception as e:
+        print(f"[UPDATE STATION ERROR] {e}")
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
+@app.route("/api/admin/stations/<station_id>", methods=["DELETE"])
+def delete_station(station_id):
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                DELETE FROM STATION
+                WHERE STATION_ID = :1
+                """,
+                (station_id,)
+            )
+
+            if cursor.rowcount == 0:
+                return jsonify({
+                    "error": "Station not found"
+                }), 404
+
+            conn.commit()
+
+        return jsonify({
+            "message": "Station deleted successfully",
+            "station_id": station_id
+        }), 200
+
+    except Exception as e:
+        print(f"[DELETE STATION ERROR] {e}")
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+# ============================================================
+# 7. TRAIN SEARCH
+# ============================================================
+
+@app.route("/api/trains/search", methods=["GET"])
+def search_trains():
+
+    source = request.args.get(
+        "source",
+        request.args.get("from_station")
+    )
+
+    destination = request.args.get(
+        "destination",
+        request.args.get("to_station")
+    )
+
+    journey_date = request.args.get(
+        "date",
+        request.args.get("journey_date")
+    )
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            sql = """
+                SELECT
+                    ts.schedule_id,
+                    ts.train_id,
+                    t.train_name,
+                    t.train_category,
+
+                    ts.route_id,
+                    r.route_name,
+                    r.distance,
+
+                    ts.journey_date,
+
+                    ts.origin_station_id,
+                    os.station_name AS origin_station_name,
+
+                    ts.destination_station_id,
+                    ds.station_name AS destination_station_name,
+
+                    ts.departure_time,
+                    ts.arrival_time,
+                    ts.delay,
+                    ts.assigned_platform_id,
+                    ts.weekly_off_day,
+                    ts.status,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM SEAT s
+                        JOIN COACH c
+                          ON c.coach_id = s.coach_id
+                        WHERE c.train_id = ts.train_id
+                          AND s.seat_id NOT IN (
+                              SELECT b.seat_id
+                              FROM BOOKING b
+                              WHERE b.schedule_id = ts.schedule_id
+                                AND b.status = 'CONFIRMED'
+                          )
+                          AND s.seat_status = 'AVAILABLE'
+                    ) AS available_seats
+
+                FROM TRAIN_SCHEDULE ts
+
+                JOIN TRAIN t
+                  ON t.train_id = ts.train_id
+
+                JOIN ROUTE r
+                  ON r.route_id = ts.route_id
+
+                LEFT JOIN STATION os
+                  ON os.station_id = ts.origin_station_id
+
+                LEFT JOIN STATION ds
+                  ON ds.station_id = ts.destination_station_id
+
+                WHERE 1 = 1
+            """
+
+            params = {}
+
+            if source:
+                sql += """
+                    AND (
+                        LOWER(os.station_name)
+                            LIKE LOWER(:source)
+                        OR LOWER(ts.origin_station_id)
+                            LIKE LOWER(:source)
+                    )
+                """
+
+                params["source"] = f"%{source}%"
+
+            if destination:
+                sql += """
+                    AND (
+                        LOWER(ds.station_name)
+                            LIKE LOWER(:destination)
+                        OR LOWER(ts.destination_station_id)
+                            LIKE LOWER(:destination)
+                    )
+                """
+
+                params["destination"] = f"%{destination}%"
+
+            if journey_date:
+                sql += """
+                    AND TRUNC(ts.journey_date) =
+                        TO_DATE(
+                            :journey_date,
+                            'YYYY-MM-DD'
+                        )
+                """
+
+                params["journey_date"] = str(
+                    journey_date
+                )[:10]
+
+            sql += """
+                ORDER BY
+                    ts.journey_date,
+                    ts.departure_time
+            """
+
+            cursor.execute(sql, params)
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "trains": clean_dict(result)
+            }), 200
+
+    except Exception as e:
+
+        print(f"[TRAIN SEARCH ERROR] {e}")
+
+        return jsonify({
+            "error": "Train search failed.",
+            "trains": [],
+            "details": str(e)
+        }), 500
+
+# ============================================================
+# 8. TRAIN COACHES
+# ============================================================
+
+@app.route(
+    "/api/trains/<train_id>/coaches",
+    methods=["GET"]
+)
+def train_coaches(train_id):
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT
+                    c.coach_id,
+                    c.train_id,
+                    c.coach_name,
+                    c.coach_type,
+                    c.capacity,
+                    c.status,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM SEAT s
+                        WHERE s.coach_id =
+                              c.coach_id
+                    ) AS total_seats,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM SEAT s
+                        WHERE s.coach_id =
+                              c.coach_id
+                          AND s.seat_status =
+                              'AVAILABLE'
+                    ) AS available_seats,
+
+                    (
+                        SELECT CALCULATE_FARE(
+                            ts.route_id,
+                            c.coach_type,
+                            'GENERAL'
+                        )
+                        FROM TRAIN_SCHEDULE ts
+                        WHERE ts.train_id =
+                              c.train_id
+                          AND ROWNUM = 1
+                    ) AS fare
+
+                FROM COACH c
+
+                WHERE c.train_id =
+                      :train_id
+
+                ORDER BY c.coach_name
+                """,
+                {
+                    "train_id": train_id
+                }
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "coaches": clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(f"[COACHES ERROR] {e}")
+
+        return jsonify({
+            "error": "Failed to load coaches.",
+            "coaches": [],
+        }), 500
+
+
+# ============================================================
+# 9. COACH SEATS
+# ============================================================
+
+@app.route(
+    "/api/coaches/<coach_id>/seats",
+    methods=["GET"]
+)
+def coach_seats(coach_id):
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT
+                    s.seat_id,
+                    s.coach_id,
+                    s.seat_number,
+                    s.seat_status,
+                    c.coach_name,
+                    c.coach_type,
+                    c.train_id
+
+                FROM SEAT s
+
+                JOIN COACH c
+                  ON c.coach_id =
+                     s.coach_id
+
+                WHERE s.coach_id =
+                      :coach_id
+
+                ORDER BY s.seat_number
+                """,
+                {
+                    "coach_id": coach_id
+                }
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "seats": clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(f"[SEATS ERROR] {e}")
+
+        return jsonify({
+            "error": "Failed to load seats.",
+            "seats": [],
+        }), 500
+
+
+# ============================================================
+# 10. CREATE BOOKING
+# ============================================================
+
+@app.route("/api/bookings", methods=["POST"])
+@require_auth
+def create_booking(current_user):
+
+    data = get_json()
+
+    user_id = get_user_id(current_user)
+
+    if not user_id:
+        return jsonify({
+            "error": "Authenticated user ID is missing."
+        }), 401
+
+    train_id = first_value(
+        data,
+        "train_id",
+        "trainId"
+    )
+
+    schedule_id = first_value(
+        data,
+        "schedule_id",
+        "scheduleId"
+    )
+
+    coach_id = first_value(
+        data,
+        "coach_id",
+        "coachId"
+    )
+
+    seat_id = first_value(
+        data,
+        "seat_id",
+        "seatId"
+    )
+
+    if not train_id:
+        return jsonify({
+            "error": "train_id is required."
+        }), 400
+
+    if not coach_id:
+        return jsonify({
+            "error": "coach_id is required."
+        }), 400
+
+    if not seat_id:
+        return jsonify({
+            "error": "seat_id is required."
+        }), 400
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            # Verify passenger
+            cursor.execute(
+                """
+                SELECT passenger_type
+                FROM PASSENGER
+                WHERE user_id = :user_id
+                """,
+                {
+                    "user_id": user_id
+                }
+            )
+
+            passenger_row = cursor.fetchone()
+
+            if not passenger_row:
+                return jsonify({
+                    "error":
+                    "Only passengers can create bookings."
+                }), 403
+
+            passenger_type = passenger_row[0]
+
+            # Find schedule
+            if not schedule_id:
+
+                cursor.execute(
+                    """
+                    SELECT schedule_id
+                    FROM TRAIN_SCHEDULE
+                    WHERE train_id = :train_id
+                    ORDER BY journey_date
+                    """,
+                    {
+                        "train_id": train_id
+                    }
+                )
+
+                schedule_row = cursor.fetchone()
+
+                if not schedule_row:
+                    return jsonify({
+                        "error":
+                        "No schedule found for this train."
+                    }), 404
+
+                schedule_id = schedule_row[0]
+
+            # Verify schedule
+            cursor.execute(
+                """
+                SELECT
+                    ts.route_id,
+                    ts.journey_date
+
+                FROM TRAIN_SCHEDULE ts
+
+                WHERE ts.schedule_id =
+                      :schedule_id
+
+                  AND ts.train_id =
+                      :train_id
+                """,
+                {
+                    "schedule_id": schedule_id,
+                    "train_id": train_id,
+                }
+            )
+
+            schedule_row = cursor.fetchone()
+
+            if not schedule_row:
+                return jsonify({
+                    "error": "Invalid train schedule."
+                }), 400
+
+            route_id = schedule_row[0]
+            journey_date = schedule_row[1]
+
+            # Verify coach
+            cursor.execute(
+                """
+                SELECT
+                    coach_id,
+                    coach_name,
+                    coach_type
+
+                FROM COACH
+
+                WHERE coach_id =
+                      :coach_id
+
+                  AND train_id =
+                      :train_id
+                """,
+                {
+                    "coach_id": coach_id,
+                    "train_id": train_id,
+                }
+            )
+
+            coach_row = cursor.fetchone()
+
+            if not coach_row:
+                return jsonify({
+                    "error":
+                    "Invalid coach for this train."
+                }), 400
+
+            coach_name = coach_row[1]
+            coach_type = coach_row[2]
+
+            # Verify seat
+            cursor.execute(
+                """
+                SELECT
+                    seat_id,
+                    seat_number,
+                    seat_status
+
+                FROM SEAT
+
+                WHERE seat_id =
+                      :seat_id
+
+                  AND coach_id =
+                      :coach_id
+
+                FOR UPDATE
+                """,
+                {
+                    "seat_id": seat_id,
+                    "coach_id": coach_id,
+                }
+            )
+
+            seat_row = cursor.fetchone()
+
+            if not seat_row:
+                return jsonify({
+                    "error":
+                    "Seat not found in selected coach."
+                }), 404
+
+            seat_number = seat_row[1]
+            seat_status = seat_row[2]
+
+            if seat_status != "AVAILABLE":
+                return jsonify({
+                    "error":
+                    "Selected seat is not available.",
+                    "seat_status": seat_status,
+                }), 409
+
+            booking_id = generate_id("BKG")
+
+            booking_datetime = datetime.now()
+
+            number_and_seat = str(seat_number)
+
+            # BOOKING
+            cursor.execute(
+                """
+                INSERT INTO BOOKING (
+                    booking_id,
+                    user_id,
+                    train_id,
+                    schedule_id,
+                    coach_id,
+                    seat_id,
+                    booking_date,
+                    booking_time,
+                    status,
+                    number_and_seat
+                )
+                VALUES (
+                    :booking_id,
+                    :user_id,
+                    :train_id,
+                    :schedule_id,
+                    :coach_id,
+                    :seat_id,
+                    :booking_date,
+                    :booking_time,
+                    'CONFIRMED',
+                    :number_and_seat
+                )
+                """,
+                {
+                    "booking_id": booking_id,
+                    "user_id": user_id,
+                    "train_id": train_id,
+                    "schedule_id": schedule_id,
+                    "coach_id": coach_id,
+                    "seat_id": seat_id,
+                    "booking_date":
+                        booking_datetime.date(),
+                    "booking_time":
+                        booking_datetime.strftime(
+                            "%H:%M:%S"
+                        ),
+                    "number_and_seat":
+                        number_and_seat,
+                }
+            )
+
+            # Seat BOOKED
+           
+
+            # Read calculated fare
+            cursor.execute(
+                """
+                SELECT
+                    booking_id,
+                    base_fare,
+                    vat,
+                    service_charge,
+                    amount,
+                    status
+
+                FROM BOOKING
+
+                WHERE booking_id =
+                      :booking_id
+                """,
+                {
+                    "booking_id": booking_id
+                }
+            )
+
+            booking_row = cursor.fetchone()
+
+            if not booking_row:
+                raise RuntimeError(
+                    "Booking was inserted but "
+                    "could not be retrieved."
+                )
+
+            booking_columns = [
+                col[0].lower()
+                for col in cursor.description
+            ]
+
+            booking_data = dict(
+                zip(
+                    booking_columns,
+                    booking_row
+                )
+            )
+
+            amount = (
+                booking_data.get("amount")
+                or 0
+            )
+
+            # PAYMENT
+            payment_id = generate_id("PAY")
+
+            payment_method = first_value(
+                data,
+                "method",
+                "payment_method",
+                "paymentMethod",
+                default="CASH"
+            )
+
+            cursor.execute(
+                """
+                INSERT INTO PAYMENT (
+                    payment_id,
+                    booking_id,
+                    payment_date,
+                    payment_time,
+                    amount,
+                    method,
+                    receipt,
+                    status
+                )
+                VALUES (
+                    :payment_id,
+                    :booking_id,
+                    :payment_date,
+                    :payment_time,
+                    :amount,
+                    :method,
+                    :receipt,
+                    'COMPLETED'
+                )
+                """,
+                {
+                    "payment_id": payment_id,
+                    "booking_id": booking_id,
+                    "payment_date":
+                        booking_datetime.date(),
+                    "payment_time":
+                        booking_datetime.strftime(
+                            "%H:%M:%S"
+                        ),
+                    "amount": amount,
+                    "method": payment_method,
+                    "receipt":
+                        f"RCT-{booking_id}",
+                }
+            )
+
+            # TICKET
+            ticket_id = generate_id("TKT")
+
+            cursor.execute(
+                """
+                INSERT INTO TICKET (
+                    ticket_id,
+                    payment_id,
+                    booking_id,
+                    schedule_id,
+                    ticket_manager_id,
+                    seat_number,
+                    coach_no,
+                    seat_type,
+                    status
+                )
+                VALUES (
+                    :ticket_id,
+                    :payment_id,
+                    :booking_id,
+                    :schedule_id,
+                    NULL,
+                    :seat_number,
+                    :coach_no,
+                    :seat_type,
+                    'CONFIRMED'
+                )
+                """,
+                {
+                    "ticket_id": ticket_id,
+                    "payment_id": payment_id,
+                    "booking_id": booking_id,
+                    "schedule_id": schedule_id,
+                    "seat_number": str(seat_number),
+                    "coach_no": str(coach_name),
+                    "seat_type": coach_type,
+                }
+            )
+
+            conn.commit()
+
+            return jsonify({
+                "message":
+                    "Booking created successfully.",
+                "booking": clean_dict({
+                    "booking_id": booking_id,
+                    "payment_id": payment_id,
+                    "ticket_id": ticket_id,
+                    "train_id": train_id,
+                    "schedule_id": schedule_id,
+                    "coach_id": coach_id,
+                    "seat_id": seat_id,
+                    "seat_number": seat_number,
+                    "coach_type": coach_type,
+                    "passenger_type":
+                        passenger_type,
+                    "route_id": route_id,
+                    "journey_date":
+                        journey_date,
+                    "status":
+                        booking_data.get(
+                            "status"
+                        ),
+                    "base_fare":
+                        booking_data.get(
+                            "base_fare"
+                        ),
+                    "vat":
+                        booking_data.get("vat"),
+                    "service_charge":
+                        booking_data.get(
+                            "service_charge"
+                        ),
+                    "amount": amount,
+                }),
+            }), 201
+
+    except Exception as e:
+        print(f"[BOOKING ERROR] {e}")
+
+        return jsonify({
+            "error":
+                "Booking creation failed.",
+            "details": str(e),
+        }), 500
+
+
+# ============================================================
+# 11. GET USER BOOKINGS
+# ============================================================
+
+@app.route("/api/bookings", methods=["GET"])
+@require_auth
+def get_bookings(current_user):
+
+    user_id = get_user_id(current_user)
+
+    if not user_id:
+        return jsonify({
+            "error":
+                "Authenticated user ID is missing."
+        }), 401
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT
+                    b.booking_id,
+                    b.user_id,
+                    b.train_id,
+                    tr.train_name,
+                    b.schedule_id,
+                    b.coach_id,
+                    c.coach_name,
+                    c.coach_type,
+                    b.seat_id,
+                    s.seat_number,
+
+                    b.booking_date,
+                    b.booking_time,
+                    b.status,
+                    b.number_and_seat,
+
+                    b.base_fare,
+                    b.vat,
+                    b.service_charge,
+                    b.amount,
+
+                    t.ticket_id,
+                    t.status AS ticket_status,
+
+                    p.payment_id,
+                    p.method AS payment_method,
+                    p.status AS payment_status
+
+                FROM BOOKING b
+
+                JOIN TRAIN tr
+                  ON tr.train_id =
+                     b.train_id
+
+                LEFT JOIN COACH c
+                  ON c.coach_id =
+                     b.coach_id
+
+                LEFT JOIN SEAT s
+                  ON s.seat_id =
+                     b.seat_id
+
+                LEFT JOIN TICKET t
+                  ON t.booking_id =
+                     b.booking_id
+
+                LEFT JOIN PAYMENT p
+                  ON p.booking_id =
+                     b.booking_id
+
+                WHERE b.user_id =
+                      :user_id
+
+                ORDER BY
+                    b.booking_date DESC,
+                    b.booking_time DESC
+                """,
+                {
+                    "user_id": user_id
+                }
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "bookings":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(f"[BOOKINGS ERROR] {e}")
+
+        return jsonify({
+            "error":
+                "Get bookings failed.",
+            "bookings": [],
+        }), 500
+
+
+# ============================================================
+# 12. CANCEL TICKET
+# ============================================================
+
+@app.route(
+    "/api/tickets/<ticket_id>/cancel",
+    methods=["POST"]
+)
+@require_auth
+def cancel_ticket(current_user, ticket_id):
+
+    data = get_json()
+
+    reason = first_value(
+        data,
+        "reason",
+        default=
+            "Passenger requested cancellation."
+    )
+
+    user_id = get_user_id(current_user)
+
+    if not user_id:
+        return jsonify({
+            "error":
+                "Authenticated user ID is missing."
+        }), 401
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT
+                    t.ticket_id,
+                    t.booking_id,
+                    b.user_id,
+                    b.amount,
+                    b.seat_id,
+                    b.status AS booking_status
+
+                FROM TICKET t
+
+                JOIN BOOKING b
+                  ON b.booking_id =
+                     t.booking_id
+
+                WHERE t.ticket_id =
+                      :ticket_id
+
+                  AND b.user_id =
+                      :user_id
+                """,
+                {
+                    "ticket_id": ticket_id,
+                    "user_id": user_id,
+                }
+            )
+
+            ticket_row = cursor.fetchone()
+
+            if not ticket_row:
+                return jsonify({
+                    "error": "Ticket not found."
+                }), 404
+
+            booking_id = ticket_row[1]
+            seat_id = ticket_row[4]
+
+            cancellation_id = generate_id("CAN")
+
+            cursor.execute(
+                """
+                INSERT INTO CANCELLATION (
+                    cancellation_id,
+                    ticket_id,
+                    status,
+                    reason,
+                    cancellation_time,
+                    cancellation_date
+                )
+                VALUES (
+                    :cancellation_id,
+                    :ticket_id,
+                    'APPROVED',
+                    :reason,
+                    TO_CHAR(SYSTIMESTAMP, 'HH24:MI:SS'),
+                    SYSDATE
+                )
+                """,
+                {
+                    "cancellation_id":
+                        cancellation_id,
+                    "ticket_id":
+                        ticket_id,
+                    "reason":
+                        reason,
+                }
+            )
+
+            cursor.execute(
+                """
+                UPDATE TICKET
+                SET status = 'CANCELLED'
+                WHERE ticket_id =
+                      :ticket_id
+                """,
+                {
+                    "ticket_id": ticket_id
+                }
+            )
+
+            cursor.execute(
+                """
+                UPDATE BOOKING
+                SET status = 'CANCELLED'
+                WHERE booking_id =
+                      :booking_id
+                """,
+                {
+                    "booking_id":
+                        booking_id
+                }
+            )
+
+            
+
+            refund_id = generate_id("REF")
+
+            cursor.execute(
+                """
+                INSERT INTO REFUND (
+                    refund_id,
+                    cancellation_id,
+                    status,
+                    amount,
+                    refund_date
+                )
+                VALUES (
+                    :refund_id,
+                    :cancellation_id,
+                    'PENDING',
+                    0,
+                    SYSDATE
+                )
+                """,
+                {
+                    "refund_id": refund_id,
+                    "cancellation_id":
+                        cancellation_id,
+                }
+            )
+
+            conn.commit()
+
+            cursor.execute(
+                """
+                SELECT
+                    refund_id,
+                    cancellation_id,
+                    status,
+                    amount,
+                    refund_date
+
+                FROM REFUND
+
+                WHERE refund_id =
+                      :refund_id
+                """,
+                {
+                    "refund_id":
+                        refund_id
+                }
+            )
+
+            refund_row = cursor.fetchone()
+
+            refund_data = (
+                row_to_dict(
+                    cursor,
+                    refund_row
+                )
+                if refund_row
+                else {}
+            )
+
+            return jsonify({
+                "message":
+                    "Ticket cancelled successfully.",
+                "ticket_id":
+                    ticket_id,
+                "cancellation_id":
+                    cancellation_id,
+                "refund_id":
+                    refund_id,
+                "refund":
+                    clean_dict(refund_data),
+            }), 200
+
+    except Exception as e:
+        print(f"[CANCEL ERROR] {e}")
+
+        return jsonify({
+            "error":
+                "Ticket cancellation failed.",
+            "details": str(e),
+        }), 500
+
+
+# ============================================================
+# 13. DELAY NOTIFICATIONS
+# ============================================================
+
+@app.route(
+    "/api/notifications/delays",
+    methods=["GET"]
+)
+@require_auth
+def delay_notifications(current_user):
+
+    user_id = get_user_id(current_user)
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT
+                    n.notification_id,
+                    n.user_id,
+                    n.train_id,
+                    n.title,
+                    n.message,
+                    n.notification_type,
+                    n.created_at,
+                    n.is_read,
+                    tr.train_name
+
+                FROM NOTIFICATION n
+
+                LEFT JOIN TRAIN tr
+                  ON tr.train_id =
+                     n.train_id
+
+                WHERE n.user_id =
+                      :user_id
+                      
+                      AND n.notification_type = 'DELAY'
+
+                ORDER BY
+                    n.created_at DESC
+                """,
+                {
+                    "user_id": user_id
+                }
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "notifications":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[NOTIFICATIONS ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Delays failed.",
+            "notifications": [],
+        }), 500
+
+
+# ============================================================
+# 14. MANAGER UPDATE TRAIN DELAY
+# ============================================================
+
+@app.route(
+    "/api/manager/trains/<train_id>/delay",
+    methods=["PUT"]
+)
+@require_role(ROLE_TRAIN_MANAGER)
+def manager_update_delay(
+    current_user,
+    train_id
+):
+
+    data = get_json()
+
+    delay = first_value(
+        data,
+        "delay",
+        "delay_minutes",
+        "delayMinutes",
+        default=0
+    )
+
+    cause = first_value(
+        data,
+        "cause",
+        "reason",
+        default="Operational delay."
+    )
+
+    try:
+        delay_value = int(delay)
+    except Exception:
+        return jsonify({
+            "error":
+                "Delay must be an integer."
+        }), 400
+
+    user_id = get_user_id(current_user)
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                UPDATE TRAIN_SCHEDULE
+                SET
+                    delay = :delay,
+                    status =
+                        CASE
+                            WHEN :delay > 0
+                            THEN 'DELAYED'
+                            ELSE status
+                        END
+
+                WHERE schedule_id = (
+                    SELECT schedule_id
+                    FROM (
+                        SELECT schedule_id
+                        FROM TRAIN_SCHEDULE
+                        WHERE train_id =
+                              :train_id
+                        ORDER BY journey_date DESC
+                    )
+                    WHERE ROWNUM = 1
+                )
+                """,
+                {
+                    "delay":
+                        delay_value,
+                    "train_id":
+                        train_id,
+                }
+            )
+
+            status_log_id = generate_id("LOG")
+
+            cursor.execute(
+                """
+                INSERT INTO TRAIN_STATUS_LOG (
+                    status_log_id,
+                    train_id,
+                    updated_by,
+                    operational_status,
+                    delay_minutes,
+                    cause,
+                    status_date
+                )
+                VALUES (
+                    :status_log_id,
+                    :train_id,
+                    :updated_by,
+                    'DELAYED',
+                    :delay_minutes,
+                    :cause,
+                    SYSDATE
+                )
+                """,
+                {
+                    "status_log_id":
+                        status_log_id,
+                    "train_id":
+                        train_id,
+                    "updated_by":
+                        user_id,
+                    "delay_minutes":
+                        delay_value,
+                    "cause":
+                        cause,
+                }
+            )
+
+            cursor.execute(
+                """
+                SELECT DISTINCT user_id
+                FROM BOOKING
+                WHERE train_id =
+                      :train_id
+
+                  AND status NOT IN
+                      ('CANCELLED')
+                """,
+                {
+                    "train_id":
+                        train_id
+                }
+            )
+
+            passenger_ids = [
+                row[0]
+                for row in cursor.fetchall()
+            ]
+
+            for passenger_id in passenger_ids:
+
+                notification_id = (
+                    generate_id("NOT")
+                )
+
+                cursor.execute(
+                    """
+                    INSERT INTO NOTIFICATION (
+                        notification_id,
+                        user_id,
+                        train_id,
+                        title,
+                        message,
+                        notification_type,
+                        created_at,
+                        is_read
+                    )
+                    VALUES (
+                        :notification_id,
+                        :user_id,
+                        :train_id,
+                        :title,
+                        :message,
+                        'DELAY',
+                        SYSTIMESTAMP,
+                        'N'
+                    )
+                    """,
+                    {
+                        "notification_id":
+                            notification_id,
+                        "user_id":
+                            passenger_id,
+                        "train_id":
+                            train_id,
+                        "title":
+                            "Train Delay",
+                        "message":
+                            (
+                                f"Train {train_id} "
+                                f"is delayed by "
+                                f"{delay_value} minutes."
+                            ),
+                    }
+                )
+
+            conn.commit()
+
+            return jsonify({
+                "message":
+                    "Train delay updated successfully.",
+                "train_id":
+                    train_id,
+                "delay":
+                    delay_value,
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[MANAGER DELAY ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to update train delay.",
+            "details": str(e),
+        }), 500
+
+
+# ============================================================
+# 15. MANAGER UPDATE TRAIN STATUS
+# ============================================================
+
+@app.route(
+    "/api/manager/trains/<train_id>/status",
+    methods=["PUT"]
+)
+@require_role(ROLE_TRAIN_MANAGER)
+def manager_update_status(
+    current_user,
+    train_id
+):
+
+    data = get_json()
+
+    status = first_value(
+        data,
+        "status",
+        "operational_status",
+        "operationalStatus"
+    )
+
+    cause = first_value(
+        data,
+        "cause",
+        "reason",
+        default=
+            "Status updated by train manager."
+    )
+
+    if not status:
+        return jsonify({
+            "error":
+                "Status is required."
+        }), 400
+
+    user_id = get_user_id(current_user)
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                UPDATE TRAIN
+                SET operational_status =
+                    :status
+
+                WHERE train_id =
+                      :train_id
+                """,
+                {
+                    "status":
+                        status,
+                    "train_id":
+                        train_id,
+                }
+            )
+
+            status_log_id = generate_id("LOG")
+
+            cursor.execute(
+                """
+                INSERT INTO TRAIN_STATUS_LOG (
+                    status_log_id,
+                    train_id,
+                    updated_by,
+                    operational_status,
+                    delay_minutes,
+                    cause,
+                    status_date
+                )
+                VALUES (
+                    :status_log_id,
+                    :train_id,
+                    :updated_by,
+                    :status,
+                    0,
+                    :cause,
+                    SYSDATE
+                )
+                """,
+                {
+                    "status_log_id":
+                        status_log_id,
+                    "train_id":
+                        train_id,
+                    "updated_by":
+                        user_id,
+                    "status":
+                        status,
+                    "cause":
+                        cause,
+                }
+            )
+
+            conn.commit()
+
+            return jsonify({
+                "message":
+                    "Train status updated successfully.",
+                "train_id":
+                    train_id,
+                "status":
+                    status,
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[MANAGER STATUS ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to update train status.",
+            "details": str(e),
+        }), 500
+
+
+# ============================================================
+# 16. MANAGER REPORT INCIDENT
+# ============================================================
+
+@app.route(
+    "/api/manager/incidents",
+    methods=["POST"]
+)
+@require_role(ROLE_TRAIN_MANAGER)
+def manager_report_incident(
+    current_user
+):
+
+    data = get_json()
+
+    user_id = get_user_id(current_user)
+
+    train_id = first_value(
+        data,
+        "train_id",
+        "trainId"
+    )
+
+    incident_type = first_value(
+        data,
+        "incident_type",
+        "incidentType",
+        default="GENERAL"
+    )
+
+    description = first_value(
+        data,
+        "description",
+        default=""
+    )
+
+    priority = first_value(
+        data,
+        "priority",
+        default="MEDIUM"
+    )
+
+    if not train_id or not description:
+        return jsonify({
+            "error":
+                "train_id and description are required."
+        }), 400
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT user_id
+                FROM EMPLOYEE
+                WHERE user_id =
+                      :user_id
+                """,
+                {
+                    "user_id":
+                        user_id
+                }
+            )
+
+            if not cursor.fetchone():
+                return jsonify({
+                    "error":
+                        "Authenticated user is not an employee."
+                }), 403
+
+            emergency_report_id = (
+                generate_id("ER")
+            )
+
+            cursor.execute(
+                """
+                INSERT INTO EMERGENCY_REPORT (
+                    emergency_report_id,
+                    train_id,
+                    reported_by,
+                    incident_type,
+                    description,
+                    priority,
+                    report_time,
+                    status
+                )
+                VALUES (
+                    :emergency_report_id,
+                    :train_id,
+                    :reported_by,
+                    :incident_type,
+                    :description,
+                    :priority,
+                    SYSTIMESTAMP,
+                    'OPEN'
+                )
+                """,
+                {
+                    "emergency_report_id":
+                        emergency_report_id,
+                    "train_id":
+                        train_id,
+                    "reported_by":
+                        user_id,
+                    "incident_type":
+                        incident_type,
+                    "description":
+                        description,
+                    "priority":
+                        priority,
+                }
+            )
+
+            conn.commit()
+
+            return jsonify({
+                "message":
+                    "Incident reported successfully.",
+                "emergency_report_id":
+                    emergency_report_id,
+            }), 201
+
+    except Exception as e:
+        print(
+            f"[INCIDENT ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to report incident.",
+            "details": str(e),
+        }), 500
+
+
+# ============================================================
+# 17. MANAGER SCHEDULE REQUESTS - GET
+# ============================================================
+
+@app.route(
+    "/api/manager/schedule-requests",
+    methods=["GET"]
+)
+@require_role(
+    ROLE_TRAIN_MANAGER,
+    ROLE_STATION_MASTER
+)
+def get_schedule_requests(
+    current_user
+):
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT
+                    sr.request_id,
+                    sr.train_id,
+                    tr.train_name,
+                    sr.schedule_id,
+                    sr.requested_by,
+                    sr.requested_change,
+                    sr.reason,
+                    sr.request_date,
+                    sr.status,
+                    sr.reviewed_by,
+                    sr.review_date,
+                    sr.review_comment
+
+                FROM SCHEDULE_UPDATE_REQUEST sr
+
+                LEFT JOIN TRAIN tr
+                  ON tr.train_id =
+                     sr.train_id
+
+                ORDER BY
+                    sr.request_date DESC
+                """
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "requests":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[SCHEDULE REQUEST GET ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to load schedule requests.",
+            "requests": [],
+        }), 500
+
+
+# ============================================================
+# 18. MANAGER SCHEDULE REQUESTS - POST
+# ============================================================
+
+@app.route(
+    "/api/manager/schedule-requests",
+    methods=["POST"]
+)
+@require_role(ROLE_TRAIN_MANAGER)
+def create_schedule_request(
+    current_user
+):
+
+    data = get_json()
+
+    user_id = get_user_id(current_user)
+
+    train_id = first_value(
+        data,
+        "train_id",
+        "trainId"
+    )
+
+    schedule_id = first_value(
+        data,
+        "schedule_id",
+        "scheduleId"
+    )
+
+    requested_change = first_value(
+        data,
+        "requested_change",
+        "request_change",
+        "requestedChange",
+        default=""
+    )
+
+    reason = first_value(
+        data,
+        "reason",
+        default=""
+    )
+
+    if not train_id:
+        return jsonify({
+            "error":
+                "train_id is required."
+        }), 400
+
+    if not requested_change:
+        return jsonify({
+            "error":
+                "requested_change is required."
+        }), 400
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT user_id
+                FROM EMPLOYEE
+                WHERE user_id =
+                      :user_id
+                """,
+                {
+                    "user_id":
+                        user_id
+                }
+            )
+
+            if not cursor.fetchone():
+                return jsonify({
+                    "error":
+                        "Authenticated user is not an employee."
+                }), 403
+
+            request_id = generate_id("REQ")
+
+            cursor.execute(
+                """
+                INSERT INTO SCHEDULE_UPDATE_REQUEST (
+                    request_id,
+                    train_id,
+                    schedule_id,
+                    requested_by,
+                    requested_change,
+                    reason,
+                    request_date,
+                    status
+                )
+                VALUES (
+                    :request_id,
+                    :train_id,
+                    :schedule_id,
+                    :requested_by,
+                    :requested_change,
+                    :reason,
+                    SYSDATE,
+                    'PENDING'
+                )
+                """,
+                {
+                    "request_id":
+                        request_id,
+                    "train_id":
+                        train_id,
+                    "schedule_id":
+                        schedule_id,
+                    "requested_by":
+                        user_id,
+                    "requested_change":
+                        requested_change,
+                    "reason":
+                        reason,
+                }
+            )
+
+            conn.commit()
+
+            return jsonify({
+                "message":
+                    "Schedule update request submitted.",
+                "request_id":
+                    request_id,
+            }), 201
+
+    except Exception as e:
+        print(
+            f"[SCHEDULE REQUEST POST ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to create schedule request.",
+            "details": str(e),
+        }), 500
+
+
+# ============================================================
+# 19. ADMIN INCIDENTS
+# ============================================================
+
+@app.route(
+    "/api/admin/incidents",
+    methods=["GET"]
+)
+@require_role(ROLE_ADMIN)
+def admin_incidents(current_user):
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT
+                    er.emergency_report_id,
+                    er.train_id,
+                    tr.train_name,
+                    er.reported_by,
+                    e.role AS reporter_role,
+                    au.first_name || ' ' ||
+                        au.last_name
+                        AS reporter_name,
+                    er.incident_type,
+                    er.description,
+                    er.priority,
+                    er.report_time,
+                    er.status
+
+                FROM EMERGENCY_REPORT er
+
+                LEFT JOIN TRAIN tr
+                  ON tr.train_id =
+                     er.train_id
+
+                LEFT JOIN EMPLOYEE e
+                  ON e.user_id =
+                     er.reported_by
+
+                LEFT JOIN APP_USER au
+                  ON au.user_id =
+                     er.reported_by
+
+                ORDER BY
+                    er.report_time DESC
+                """
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "incidents":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[ADMIN INCIDENT ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Admin incidents failed.",
+            "incidents": [],
+        }), 500
+
+
+# ============================================================
+# 20. ADMIN SCHEDULES
+# ============================================================
+
+@app.route(
+    "/api/admin/schedules",
+    methods=["GET"]
+)
+@require_role(ROLE_ADMIN)
+def admin_schedules(current_user):
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT
+                    ts.schedule_id,
+                    ts.train_id,
+                    tr.train_name,
+                    ts.route_id,
+                    r.route_name,
+                    r.source_station,
+                    r.destination,
+                    ts.journey_date,
+                    ts.departure_time,
+                    ts.arrival_time,
+                    ts.delay,
+                    ts.assigned_platform_id,
+                    p.platform_no,
+                    ts.status
+
+                FROM TRAIN_SCHEDULE ts
+
+                JOIN TRAIN tr
+                  ON tr.train_id =
+                     ts.train_id
+
+                LEFT JOIN ROUTE r
+                  ON r.route_id =
+                     ts.route_id
+
+                LEFT JOIN PLATFORM p
+                  ON p.platform_id =
+                     ts.assigned_platform_id
+
+                ORDER BY
+                    ts.journey_date DESC,
+                    ts.departure_time
+                """
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "schedules":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[ADMIN SCHEDULE ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Admin schedules failed.",
+            "schedules": [],
+        }), 500
+
+
+# ============================================================
+# 21. COMPLAINTS - GET
+# ============================================================
+
+@app.route(
+    "/api/complaints",
+    methods=["GET"]
+)
+@require_auth
+def get_complaints(current_user):
+
+    user_id = get_user_id(current_user)
+    role = get_user_role(current_user)
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            if role == ROLE_ADMIN:
+
+                cursor.execute(
+                    """
+                    SELECT
+                        c.complaint_id,
+                        c.user_id,
+                        au.email,
+                        au.first_name || ' ' ||
+                            au.last_name
+                            AS user_name,
+                        c.admin_id,
+                        c.status,
+                        c.description,
+                        c.complaint_date,
+                        c.resolution_comment
+
+                    FROM COMPLAINT c
+
+                    LEFT JOIN APP_USER au
+                      ON au.user_id =
+                         c.user_id
+
+                    ORDER BY
+                        c.complaint_date DESC
+                    """
+                )
+
+            else:
+
+                cursor.execute(
+                    """
+                    SELECT
+                        c.complaint_id,
+                        c.user_id,
+                        c.admin_id,
+                        c.status,
+                        c.description,
+                        c.complaint_date,
+                        c.resolution_comment
+
+                    FROM COMPLAINT c
+
+                    WHERE c.user_id =
+                          :user_id
+
+                    ORDER BY
+                        c.complaint_date DESC
+                    """,
+                    {
+                        "user_id":
+                            user_id
+                    }
+                )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "complaints":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[COMPLAINT GET ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to load complaints.",
+            "complaints": [],
+        }), 500
+
+
+# ============================================================
+# 22. COMPLAINTS - POST
+# ============================================================
+
+@app.route(
+    "/api/complaints",
+    methods=["POST"]
+)
+@require_auth
+def create_complaint(current_user):
+
+    data = get_json()
+
+    user_id = get_user_id(current_user)
+
+    description = first_value(
+        data,
+        "description",
+        "complaint",
+        "message",
+        default=""
+    )
+
+    if not description:
+        return jsonify({
+            "error":
+                "Complaint description is required."
+        }), 400
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            complaint_id = generate_id("CMP")
+
+            cursor.execute(
+                """
+                INSERT INTO COMPLAINT (
+                    complaint_id,
+                    user_id,
+                    admin_id,
+                    status,
+                    description,
+                    complaint_date,
+                    resolution_comment
+                )
+                VALUES (
+                    :complaint_id,
+                    :user_id,
+                    NULL,
+                    'PENDING',
+                    :description,
+                    SYSDATE,
+                    NULL
+                )
+                """,
+                {
+                    "complaint_id":
+                        complaint_id,
+                    "user_id":
+                        user_id,
+                    "description":
+                        description,
+                }
+            )
+
+            conn.commit()
+
+            return jsonify({
+                "message":
+                    "Complaint submitted successfully.",
+                "complaint_id":
+                    complaint_id,
+            }), 201
+
+    except Exception as e:
+        print(
+            f"[COMPLAINT POST ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to submit complaint.",
+            "details": str(e),
+        }), 500
+
+
+# ============================================================
+# 23. USER PROFILE
+# ============================================================
+
+@app.route(
+    "/api/profile",
+    methods=["GET"]
+)
+@require_auth
+def profile(current_user):
+
+    user_id = get_user_id(current_user)
+
+    if not user_id:
+        return jsonify({
+            "error":
+                "Authenticated user ID is missing."
+        }), 401
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT
+                    u.user_id,
+                    u.email,
+                    u.user_type,
+                    u.first_name,
+                    u.middle_name,
+                    u.last_name,
+                    u.gender,
+                    u.nid,
+                    u.city,
+                    u.house_no,
+                    u.post_code,
+                    u.date_of_birth,
+
+                    (
+                        SELECT MIN(
+                            up.phone_number
+                        )
+                        FROM USER_PHONE_NUMBER up
+                        WHERE up.user_id =
+                              u.user_id
+                    ) AS phone_number
+
+                FROM APP_USER u
+
+                WHERE u.user_id =
+                      :user_id
+                """,
+                {
+                    "user_id":
+                        user_id
+                }
+            )
+
+            row = cursor.fetchone()
+
+            if not row:
+                return jsonify({
+                    "error":
+                        "User profile not found."
+                }), 404
+
+            result = row_to_dict(
+                cursor,
+                row
+            )
+
+            result["role"] = (
+                db_role_to_frontend_role(
+                    result.get("user_type")
+                )
+            )
+
+            return jsonify({
+                "profile":
+                    clean_dict(result),
+                "user":
+                    clean_dict(result),
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[PROFILE ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Profile failed.",
+            "details":
+                str(e),
+        }), 500
+
+
+# ============================================================
+# 24. ALL TRAINS / FLEET
+# ============================================================
+
+@app.route(
+    "/api/trains",
+    methods=["GET"]
+)
+def trains():
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT
+                    train_id,
+                    train_name,
+                    train_category,
+                    travel_duration,
+                    off_day,
+                    operational_status
+
+                FROM TRAIN
+
+                ORDER BY train_name
+                """
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "trains":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[TRAINS ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to load trains.",
+            "trains": [],
+        }), 500
+
+
+# ============================================================
+# 25. FARE DIRECTORY
+# ============================================================
+
+@app.route(
+    "/api/fares",
+    methods=["GET"]
+)
+def fares():
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT
+                    route_id,
+                    route_name,
+                    source_station,
+                    destination,
+                    distance,
+                    rate_per_km,
+                    coach_type,
+                    coach_factor,
+                    estimated_base_fare
+
+                FROM V_FARE_DIRECTORY
+
+                ORDER BY
+                    route_name,
+                    coach_factor
+                """
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "fares":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[FARE DIRECTORY ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to load fares.",
+            "fares": [],
+        }), 500
+
+
+# ============================================================
+# 26. TICKET MANAGER INDEX
+# ============================================================
+
+@app.route(
+    "/api/ticket-manager/index",
+    methods=["GET"]
+)
+@require_role(ROLE_TICKET_MANAGER)
+def ticket_manager_index(current_user):
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT *
+                FROM V_TICKET_MANAGER_INDEX
+                """
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "tickets":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[TICKET MANAGER INDEX ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to load ticket manager data.",
+            "tickets": [],
+        }), 500
+
+
+# ============================================================
+# 27. ADMIN BOOKING MASTER
+# ============================================================
+
+@app.route(
+    "/api/admin/bookings",
+    methods=["GET"]
+)
+@require_role(ROLE_ADMIN)
+def admin_bookings(current_user):
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT *
+                FROM V_BOOKING_MASTER
+                ORDER BY booking_date DESC
+                """
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "bookings":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[ADMIN BOOKINGS ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to load booking master.",
+            "bookings": [],
+        }), 500
+
+
+# ============================================================
+# 28. ADMIN CANCELLATION MASTER
+# ============================================================
+
+@app.route(
+    "/api/admin/cancellations",
+    methods=["GET"]
+)
+@require_role(ROLE_ADMIN)
+def admin_cancellations(current_user):
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT *
+                FROM V_CANCELLATION_MASTER
+                """
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "cancellations":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[ADMIN CANCELLATIONS ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to load cancellation master.",
+            "cancellations": [],
+        }), 500
+
+
+# ============================================================
+# 29. TRAIN SCHEDULE MASTER
+# ============================================================
+
+@app.route(
+    "/api/schedule-master",
+    methods=["GET"]
+)
+def schedule_master():
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT *
+                FROM V_TRAIN_SCHEDULE_MASTER
+                """
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "schedules":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[SCHEDULE MASTER ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to load schedule master.",
+            "schedules": [],
+        }), 500
+
+
+# ============================================================
+# 30. TRAIN COACH DIRECTORY
+# ============================================================
+
+@app.route(
+    "/api/coach-directory",
+    methods=["GET"]
+)
+def coach_directory():
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT *
+                FROM V_TRAIN_COACH_DIRECTORY
+                """
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "coaches":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[COACH DIRECTORY ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to load coach directory.",
+            "coaches": [],
+        }), 500
+
+
+# ============================================================
+# 31. TRAIN FLEET DIRECTORY
+# ============================================================
+
+@app.route(
+    "/api/train-fleet-directory",
+    methods=["GET"]
+)
+def train_fleet_directory():
+
+    try:
+        with OracleConnection() as (conn, cursor):
+
+            cursor.execute(
+                """
+                SELECT *
+                FROM V_TRAIN_FLEET_DIRECTORY
+                """
+            )
+
+            result = rows_to_dicts(cursor)
+
+            return jsonify({
+                "trains":
+                    clean_dict(result)
+            }), 200
+
+    except Exception as e:
+        print(
+            f"[FLEET DIRECTORY ERROR] {e}"
+        )
+
+        return jsonify({
+            "error":
+                "Failed to load fleet directory.",
+            "trains": [],
+        }), 500
+
+
+# ============================================================
+# 32. ROOT
+# ============================================================
+
+@app.route("/", methods=["GET"])
+def root():
+
+    return jsonify({
+        "service":
+            "JATRA Railway Management API",
+        "status":
+            "running",
+        "database":
+            "Oracle XE 11g",
+        "api":
+            "/api",
+        "health":
+            "/api/health",
+    }), 200
+
+
+# ============================================================
+# 33. ERROR HANDLERS
+# ============================================================
+
+@app.errorhandler(404)
+def not_found(error):
+
+    return jsonify({
+        "error":
+            "Endpoint not found.",
+        "path":
+            request.path,
+    }), 404
+
+
+@app.errorhandler(405)
+def method_not_allowed(error):
+
+    return jsonify({
+        "error":
+            "HTTP method not allowed.",
+        "method":
+            request.method,
+        "path":
+            request.path,
+    }), 405
+
+
+@app.errorhandler(500)
+def internal_server_error(error):
+
+    return jsonify({
+        "error":
+            "Internal server error."
+    }), 500
+# ============================================================
+# ADMIN CRUD APIs - JATRA
+# ============================================================
+
+# ---------- TRAIN ----------
+
+@app.route("/api/admin/trains", methods=["POST"])
+def admin_create_train():
+    data = request.get_json() or {}
+
+    if not data.get("train_id") or not data.get("train_name"):
+        return jsonify({"error": "train_id and train_name are required"}), 400
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                INSERT INTO TRAIN
+                (train_id, train_name, train_category, travel_duration,
+                 off_day, operational_status)
+                VALUES (:1, :2, :3, :4, :5, :6)
+            """, (
+                data["train_id"],
+                data["train_name"],
+                data.get("train_category"),
+                data.get("travel_duration"),
+                data.get("off_day"),
+                data.get("operational_status", "OPERATIONAL")
+            ))
+
+            conn.commit()
+
+        return jsonify({
+            "message": "Train created successfully",
+            "train_id": data["train_id"]
+        }), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/trains/<train_id>", methods=["PUT"])
+def admin_update_train(train_id):
+    data = request.get_json() or {}
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                UPDATE TRAIN
+                SET train_name = :1,
+                    train_category = :2,
+                    travel_duration = :3,
+                    off_day = :4,
+                    operational_status = :5
+                WHERE train_id = :6
+            """, (
+                data.get("train_name"),
+                data.get("train_category"),
+                data.get("travel_duration"),
+                data.get("off_day"),
+                data.get("operational_status"),
+                train_id
+            ))
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Train not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Train updated successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/trains/<train_id>", methods=["DELETE"])
+def admin_delete_train(train_id):
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute(
+                "DELETE FROM TRAIN WHERE train_id = :1",
+                (train_id,)
+            )
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Train not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Train deleted successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ---------- MANAGEMENT GET APIs ----------
+
+@app.route("/api/coaches", methods=["GET"])
+def get_coaches():
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                SELECT coach_id, train_id, coach_name,
+                       coach_type, capacity, status
+                FROM COACH
+                ORDER BY coach_id
+            """)
+
+            rows = cursor.fetchall()
+
+            return jsonify([
+                {
+                    "id": r[0],
+                    "trainId": r[1],
+                    "name": r[2],
+                    "type": r[3],
+                    "capacity": r[4],
+                    "status": r[5]
+                }
+                for r in rows
+            ])
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/seats", methods=["GET"])
+def get_seats():
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                SELECT seat_id, coach_id, seat_number, seat_status
+                FROM SEAT
+                ORDER BY seat_id
+            """)
+
+            rows = cursor.fetchall()
+
+            return jsonify([
+                {
+                    "id": r[0],
+                    "coachId": r[1],
+                    "seatNumber": r[2],
+                    "status": r[3]
+                }
+                for r in rows
+            ])
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/platforms", methods=["GET"])
+def get_platforms():
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                SELECT platform_id, station_id, platform_no,
+                       gauge_type, status
+                FROM PLATFORM
+                ORDER BY platform_id
+            """)
+
+            rows = cursor.fetchall()
+
+            return jsonify([
+                {
+                    "id": r[0],
+                    "stationId": r[1],
+                    "platformNo": r[2],
+                    "gaugeType": r[3],
+                    "status": r[4]
+                }
+                for r in rows
+            ])
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/routes", methods=["GET"])
+def get_routes():
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                SELECT route_id, route_name, source_station,
+                       destination, distance, status
+                FROM ROUTE
+                ORDER BY route_id
+            """)
+
+            rows = cursor.fetchall()
+
+            return jsonify([
+                {
+                    "id": r[0],
+                    "name": r[1],
+                    "source": r[2],
+                    "destination": r[3],
+                    "distance": r[4],
+                    "status": r[5]
+                }
+                for r in rows
+            ])
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/maintenance", methods=["GET"])
+def get_maintenance():
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                SELECT maintenance_id, train_id, category,
+                       target, severity, status,
+                       logged_date, reported_by
+                FROM MAINTENANCE
+                ORDER BY maintenance_id
+            """)
+
+            rows = cursor.fetchall()
+
+            return jsonify([
+                {
+                    "id": r[0],
+                    "trainId": r[1],
+                    "category": r[2],
+                    "target": r[3],
+                    "severity": r[4],
+                    "status": r[5],
+                    "loggedDate": r[6].strftime("%Y-%m-%d")
+                        if r[6] else None,
+                    "reportedBy": r[7]
+                }
+                for r in rows
+            ])
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+# ---------- COACH ----------
+
+@app.route("/api/admin/coaches", methods=["POST"])
+def admin_create_coach():
+    data = request.get_json() or {}
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                INSERT INTO COACH
+                (coach_id, train_id, coach_name, coach_type, capacity, status)
+                VALUES (:1, :2, :3, :4, :5, :6)
+            """, (
+                data["coach_id"],
+                data["train_id"],
+                data["coach_name"],
+                data["coach_type"],
+                data.get("capacity", 60),
+                data.get("status", "ACTIVE")
+            ))
+
+            conn.commit()
+
+        return jsonify({
+            "message": "Coach created successfully",
+            "coach_id": data["coach_id"]
+        }), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/coaches/<coach_id>", methods=["PUT"])
+def admin_update_coach(coach_id):
+    data = request.get_json() or {}
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                UPDATE COACH
+                SET train_id = :1,
+                    coach_name = :2,
+                    coach_type = :3,
+                    capacity = :4,
+                    status = :5
+                WHERE coach_id = :6
+            """, (
+                data.get("train_id"),
+                data.get("coach_name"),
+                data.get("coach_type"),
+                data.get("capacity"),
+                data.get("status"),
+                coach_id
+            ))
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Coach not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Coach updated successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/coaches/<coach_id>", methods=["DELETE"])
+def admin_delete_coach(coach_id):
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute(
+                "DELETE FROM COACH WHERE coach_id = :1",
+                (coach_id,)
+            )
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Coach not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Coach deleted successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------- SEAT ----------
+
+@app.route("/api/admin/seats", methods=["POST"])
+def admin_create_seat():
+    data = request.get_json() or {}
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                INSERT INTO SEAT
+                (seat_id, coach_id, seat_number, seat_status)
+                VALUES (:1, :2, :3, :4)
+            """, (
+                data["seat_id"],
+                data["coach_id"],
+                data["seat_number"],
+                data.get("seat_status", "AVAILABLE")
+            ))
+
+            conn.commit()
+
+        return jsonify({
+            "message": "Seat created successfully",
+            "seat_id": data["seat_id"]
+        }), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/seats/<seat_id>", methods=["PUT"])
+def admin_update_seat(seat_id):
+    data = request.get_json() or {}
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                UPDATE SEAT
+                SET coach_id = :1,
+                    seat_number = :2,
+                    seat_status = :3
+                WHERE seat_id = :4
+            """, (
+                data.get("coach_id"),
+                data.get("seat_number"),
+                data.get("seat_status"),
+                seat_id
+            ))
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Seat not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Seat updated successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/seats/<seat_id>", methods=["DELETE"])
+def admin_delete_seat(seat_id):
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute(
+                "DELETE FROM SEAT WHERE seat_id = :1",
+                (seat_id,)
+            )
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Seat not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Seat deleted successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------- PLATFORM ----------
+
+@app.route("/api/admin/platforms", methods=["POST"])
+def admin_create_platform():
+    data = request.get_json() or {}
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                INSERT INTO PLATFORM
+                (platform_id, station_id, platform_no, gauge_type, status)
+                VALUES (:1, :2, :3, :4, :5)
+            """, (
+                data["platform_id"],
+                data["station_id"],
+                data["platform_no"],
+                data.get("gauge_type"),
+                data.get("status", "AVAILABLE")
+            ))
+
+            conn.commit()
+
+        return jsonify({
+            "message": "Platform created successfully",
+            "platform_id": data["platform_id"]
+        }), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/platforms/<platform_id>", methods=["PUT"])
+def admin_update_platform(platform_id):
+    data = request.get_json() or {}
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                UPDATE PLATFORM
+                SET station_id = :1,
+                    platform_no = :2,
+                    gauge_type = :3,
+                    status = :4
+                WHERE platform_id = :5
+            """, (
+                data.get("station_id"),
+                data.get("platform_no"),
+                data.get("gauge_type"),
+                data.get("status"),
+                platform_id
+            ))
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Platform not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Platform updated successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/platforms/<platform_id>", methods=["DELETE"])
+def admin_delete_platform(platform_id):
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute(
+                "DELETE FROM PLATFORM WHERE platform_id = :1",
+                (platform_id,)
+            )
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Platform not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Platform deleted successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------- ROUTE ----------
+
+@app.route("/api/admin/routes", methods=["POST"])
+def admin_create_route():
+    data = request.get_json() or {}
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                INSERT INTO ROUTE
+                (route_id, route_name, source_station, destination,
+                 distance, status)
+                VALUES (:1, :2, :3, :4, :5, :6)
+            """, (
+                data["route_id"],
+                data["route_name"],
+                data["source_station"],
+                data["destination"],
+                data.get("distance"),
+                data.get("status", "ACTIVE")
+            ))
+
+            conn.commit()
+
+        return jsonify({
+            "message": "Route created successfully",
+            "route_id": data["route_id"]
+        }), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/routes/<route_id>", methods=["PUT"])
+def admin_update_route(route_id):
+    data = request.get_json() or {}
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                UPDATE ROUTE
+                SET route_name = :1,
+                    source_station = :2,
+                    destination = :3,
+                    distance = :4,
+                    status = :5
+                WHERE route_id = :6
+            """, (
+                data.get("route_name"),
+                data.get("source_station"),
+                data.get("destination"),
+                data.get("distance"),
+                data.get("status"),
+                route_id
+            ))
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Route not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Route updated successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/routes/<route_id>", methods=["DELETE"])
+def admin_delete_route(route_id):
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute(
+                "DELETE FROM ROUTE WHERE route_id = :1",
+                (route_id,)
+            )
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Route not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Route deleted successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------- FARE ----------
+
+@app.route("/api/admin/fares", methods=["POST"])
+def admin_create_fare():
+    data = request.get_json() or {}
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                INSERT INTO FARE
+                (fare_id, route_id, rate_per_km)
+                VALUES (:1, :2, :3)
+            """, (
+                data["fare_id"],
+                data["route_id"],
+                data["rate_per_km"]
+            ))
+
+            conn.commit()
+
+        return jsonify({
+            "message": "Fare created successfully",
+            "fare_id": data["fare_id"]
+        }), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/fares/<fare_id>", methods=["PUT"])
+def admin_update_fare(fare_id):
+    data = request.get_json() or {}
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                UPDATE FARE
+                SET route_id = :1,
+                    rate_per_km = :2
+                WHERE fare_id = :3
+            """, (
+                data.get("route_id"),
+                data.get("rate_per_km"),
+                fare_id
+            ))
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Fare not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Fare updated successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/fares/<fare_id>", methods=["DELETE"])
+def admin_delete_fare(fare_id):
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute(
+                "DELETE FROM FARE WHERE fare_id = :1",
+                (fare_id,)
+            )
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Fare not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Fare deleted successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------- MAINTENANCE ----------
+
+@app.route("/api/admin/maintenance", methods=["POST"])
+def admin_create_maintenance():
+    data = request.get_json() or {}
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                INSERT INTO MAINTENANCE
+                (maintenance_id, train_id, category, target, severity,
+                 status, logged_date, reported_by)
+                VALUES (:1, :2, :3, :4, :5, :6, SYSDATE, :7)
+            """, (
+                data["maintenance_id"],
+                data["train_id"],
+                data.get("category"),
+                data.get("target"),
+                data.get("severity"),
+                data.get("status", "Reported"),
+                data.get("reported_by")
+            ))
+
+            conn.commit()
+
+        return jsonify({
+            "message": "Maintenance record created successfully",
+            "maintenance_id": data["maintenance_id"]
+        }), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/maintenance/<maintenance_id>", methods=["PUT"])
+def admin_update_maintenance(maintenance_id):
+    data = request.get_json() or {}
+
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute("""
+                UPDATE MAINTENANCE
+                SET train_id = :1,
+                    category = :2,
+                    target = :3,
+                    severity = :4,
+                    status = :5,
+                    reported_by = :6
+                WHERE maintenance_id = :7
+            """, (
+                data.get("train_id"),
+                data.get("category"),
+                data.get("target"),
+                data.get("severity"),
+                data.get("status"),
+                data.get("reported_by"),
+                maintenance_id
+            ))
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Maintenance record not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Maintenance record updated successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/maintenance/<maintenance_id>", methods=["DELETE"])
+def admin_delete_maintenance(maintenance_id):
+    try:
+        with OracleConnection() as (conn, cursor):
+            cursor.execute(
+                "DELETE FROM MAINTENANCE WHERE maintenance_id = :1",
+                (maintenance_id,)
+            )
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Maintenance record not found"}), 404
+
+            conn.commit()
+
+        return jsonify({"message": "Maintenance record deleted successfully"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    app.run(debug=True, host="127.0.0.1", port=5000)
+
+if __name__ == "__main__":
+    app.run(debug=True, host="127.0.0.1", port=5000)

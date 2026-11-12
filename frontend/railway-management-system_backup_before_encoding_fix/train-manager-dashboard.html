@@ -1,0 +1,593 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Operations Dashboard - Train Manager - JATRA Railway System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: { 900: '#0f172a', 800: '#1e293b', 700: '#334155' },
+            sky:  { bright: '#38bdf8', light: '#e0f2fe', subtle: '#f0f9ff' },
+            accent: { blue: '#0284c7', hover: '#0369a1' }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container navbar-container">
+      <a href="index.html" class="brand-logo" id="brandLogoLink">
+        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-5H6V8h12v4z"/></svg>
+        <span>JATRA: RAILWAY MANAGEMENT SYSTEM</span>
+      </a>
+      <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Toggle Navigation">&#9776;</button>
+      <ul class="nav-menu" id="navMenu">
+        <li><a href="index.html" class="nav-link">Home</a></li>
+        <li><a href="search-train.html" class="nav-link">Search Trains</a></li>
+        <li><a href="my-tickets.html" class="nav-link">My Tickets</a></li>
+        <li><a href="complaint.html" class="nav-link">Complaints</a></li>
+      </ul>
+      <div class="nav-actions" id="navActions"></div>
+    </div>
+  </nav>
+
+  <div class="dashboard-container">
+    <aside class="sidebar"><!-- Injected by main.js renderRoleSidebar() --></aside>
+
+    <main class="dashboard-main p-4 sm:p-8 bg-slate-900/90 text-slate-100 flex-1">
+
+      <!-- Operations Dashboard Header Banner -->
+      <div class="mb-6 p-4 sm:p-6 bg-gradient-to-r from-slate-800 via-slate-850 to-slate-800 border border-slate-700/80 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <div class="flex flex-wrap items-center gap-2 mb-1.5">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/30">
+              &#128202; Operations Dashboard
+            </span>
+            <span id="tmStationBadge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+              Assigned Station: Dhaka (Kamalapur)
+            </span>
+            <span id="tmTrainTypeBadge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-400/30">
+              Intercity Express
+            </span>
+          </div>
+          <h1 class="text-2xl sm:text-3xl font-extrabold text-white flex items-center gap-2">
+            <svg class="w-7 h-7 text-cyan-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-5H6V8h12v4z"/></svg>
+            <span id="tmAssignedTrainHeader">Sonar Bangla Express (TR-701)</span>
+          </h1>
+          <p class="text-slate-400 text-xs sm:text-sm mt-1">
+            Central Railway Operations Management Portal &mdash; Select any operational module below to access its dedicated management page.
+          </p>
+        </div>
+        <!-- Train Switcher -->
+        <div class="flex items-center gap-2 bg-slate-900/80 p-2.5 rounded-xl border border-slate-700 w-full md:w-auto">
+          <label class="text-xs text-slate-400 font-bold whitespace-nowrap">Active Train:</label>
+          <select id="tmTrainSelect" class="bg-slate-800 border border-slate-700 text-white text-xs font-bold rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-cyan-500 focus:outline-none cursor-pointer">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+      </div>
+
+      <!-- Quick Operational Metrics Strip -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+        <div class="p-3 bg-slate-800/90 border border-slate-700/80 rounded-xl">
+          <div class="text-[11px] text-slate-400 font-medium">Train Code</div>
+          <div id="tmTrainIdDisplay" class="text-sm font-bold text-white font-mono mt-0.5">TR-701</div>
+        </div>
+        <div class="p-3 bg-slate-800/90 border border-slate-700/80 rounded-xl">
+          <div class="text-[11px] text-slate-400 font-medium">Operational Status</div>
+          <div id="tmCardStatus" class="text-sm font-bold text-emerald-400 mt-0.5">Operational</div>
+        </div>
+        <div class="p-3 bg-slate-800/90 border border-slate-700/80 rounded-xl">
+          <div class="text-[11px] text-slate-400 font-medium">Departure Schedule</div>
+          <div id="tmTrainDept" class="text-sm font-bold text-sky-300 font-mono mt-0.5">07:00 AM</div>
+        </div>
+        <div class="p-3 bg-slate-800/90 border border-slate-700/80 rounded-xl">
+          <div class="text-[11px] text-slate-400 font-medium">Arrival Schedule</div>
+          <div id="tmTrainArr" class="text-sm font-bold text-sky-300 font-mono mt-0.5">12:15 PM</div>
+        </div>
+        <div class="p-3 bg-slate-800/90 border border-slate-700/80 rounded-xl">
+          <div class="text-[11px] text-slate-400 font-medium">Total Coaches</div>
+          <div id="tmCardCoaches" class="text-sm font-bold text-indigo-300 mt-0.5">14 Coaches</div>
+        </div>
+        <div class="p-3 bg-slate-800/90 border border-slate-700/80 rounded-xl">
+          <div class="text-[11px] text-slate-400 font-medium">Delay Status</div>
+          <div id="tmCardDelayStatus" class="text-sm font-bold text-emerald-400 mt-0.5">On Time (0 min)</div>
+        </div>
+      </div>
+
+      <!-- ===== QUICK ACTION STRIP — 3 Priority Operational Controls ===== -->
+      <div class="mb-8">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/></svg>
+              Quick Operational Actions
+            </h2>
+            <p class="text-slate-400 text-xs mt-0.5">Instant access to the most critical operational controls for your assigned train.</p>
+          </div>
+          <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-800 text-slate-300 border border-slate-700">Priority Controls</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+          <!-- Quick Action 1: Report Emergency / Incident -->
+          <div class="bg-gradient-to-br from-rose-950/70 to-slate-800/90 border-2 border-rose-500/60 hover:border-rose-400/80 rounded-2xl p-5 shadow-xl flex flex-col justify-between transition-all">
+            <div>
+              <div class="flex items-center gap-3 mb-3">
+                <div class="w-12 h-12 rounded-xl bg-rose-500/20 border border-rose-400/40 flex items-center justify-center shrink-0">
+                  <svg class="w-6 h-6 text-rose-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                </div>
+                <div>
+                  <h3 class="text-sm font-extrabold text-white leading-snug">Report Emergency / Incident</h3>
+                  <p class="text-rose-300/80 text-[11px] mt-0.5">Dispatch critical alert to Central HQ</p>
+                </div>
+              </div>
+              <div class="p-2 bg-slate-900/60 rounded-lg border border-rose-900/60 text-[11px] text-slate-400 mb-4">
+                Medical emergency, track obstruction, mechanical breakdown, police support
+              </div>
+            </div>
+            <button type="button" onclick="document.getElementById('tmEmergencyModalOverlay').classList.add('active')"
+              class="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+              Dispatch Emergency Alert
+            </button>
+          </div>
+
+          <!-- Quick Action 2: Update Train Delay -->
+          <div class="bg-gradient-to-br from-amber-950/70 to-slate-800/90 border-2 border-amber-500/60 hover:border-amber-400/80 rounded-2xl p-5 shadow-xl flex flex-col justify-between transition-all">
+            <div>
+              <div class="flex items-center gap-3 mb-3">
+                <div class="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center shrink-0">
+                  <svg class="w-6 h-6 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+                </div>
+                <div>
+                  <h3 class="text-sm font-extrabold text-white leading-snug">Update Train Delay</h3>
+                  <p class="text-amber-300/80 text-[11px] mt-0.5">Log delay &amp; broadcast passenger alerts</p>
+                </div>
+              </div>
+              <div class="p-2 bg-slate-900/60 rounded-lg border border-amber-900/60 text-[11px] text-slate-400 mb-4">
+                Current Delay: <strong id="tmQuickDelayBadge" class="text-amber-300 font-mono">0 Min</strong>
+                &nbsp;|&nbsp; Revised Dept: <strong id="tmQuickEstDept" class="text-white font-mono">07:00 AM</strong>
+              </div>
+            </div>
+            <button type="button" onclick="document.getElementById('tmDelayModalOverlay').classList.add('active')"
+              class="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-white font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+              Adjust Delay &amp; Timings
+            </button>
+          </div>
+
+          <!-- Quick Action 3: Train Status Management -->
+          <div class="bg-gradient-to-br from-emerald-950/70 to-slate-800/90 border-2 border-emerald-500/60 hover:border-emerald-400/80 rounded-2xl p-5 shadow-xl flex flex-col justify-between transition-all">
+            <div>
+              <div class="flex items-center gap-3 mb-3">
+                <div class="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center shrink-0">
+                  <svg class="w-6 h-6 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+                </div>
+                <div>
+                  <h3 class="text-sm font-extrabold text-white leading-snug">Train Status Management</h3>
+                  <p class="text-emerald-300/80 text-[11px] mt-0.5">Set live operational status</p>
+                </div>
+              </div>
+              <div class="p-2 bg-slate-900/60 rounded-lg border border-emerald-900/60 text-[11px] text-slate-400 mb-4">
+                Current State: <strong id="tmQuickStatus" class="text-emerald-400">Operational</strong>
+                &nbsp;|&nbsp; Last Sync: <strong id="tmQuickLastSync" class="text-cyan-300">Today, 07:05 AM</strong>
+              </div>
+            </div>
+            <button type="button" onclick="document.getElementById('tmStatusModalOverlay').classList.add('active')"
+              class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+              Update Train Status
+            </button>
+          </div>
+
+        </div>
+      </div>
+      <!-- ===== END QUICK ACTION STRIP ===== -->
+
+      <!-- OPERATIONS FUNCTIONALITIES DIRECTORY -->
+      <div class="mb-8">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <svg class="w-5 h-5 text-slate-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+              Operations Functionalities &amp; Management Directory
+            </h2>
+            <p class="text-slate-400 text-xs mt-0.5">Select any functionality to open its dedicated page or perform instant operational adjustments.</p>
+          </div>
+          <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-800 text-slate-300 border border-slate-700">Core Operations Modules</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+          <!-- 1. Train Schedule Management -->
+          <div class="bg-slate-800/90 border border-slate-700/80 hover:border-sky-500/50 rounded-2xl p-5 shadow-lg flex flex-col justify-between transition-all">
+            <div>
+              <div class="flex items-start justify-between gap-3 mb-2">
+                <div class="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-400/30 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-sky-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+                </div>
+                <span class="px-2 py-0.5 text-[11px] font-bold rounded bg-sky-500/10 text-sky-300 border border-sky-400/20">Timetable Sync</span>
+              </div>
+              <h3 class="text-base font-bold text-white mb-1">Train Schedule Management</h3>
+              <p class="text-slate-400 text-xs leading-relaxed mb-3">Configure departure/arrival hours, intermediate stoppage timings, platform assignments, and weekly off-day schedules.</p>
+              <div class="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1 mb-4">
+                <div class="flex justify-between"><span>Origin:</span> <strong id="tmTrainSource" class="text-white">Dhaka (Kamalapur)</strong></div>
+                <div class="flex justify-between"><span>Destination:</span> <strong id="tmTrainDest" class="text-white">Chattogram Junction</strong></div>
+                <div class="flex justify-between"><span>Platform:</span> <strong id="tmTrainPlatform" class="text-amber-300">Platform #1</strong></div>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <a href="manage-schedules.html" class="flex-1 py-2 px-3 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl text-center transition-all shadow">Open Schedule Page &rarr;</a>
+              <button type="button" id="openScheduleModalBtn" class="py-2 px-3 bg-sky-600/90 hover:bg-sky-500 text-white font-bold text-xs rounded-xl transition-all shadow flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>
+                Request Update
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. Train Status Management -->
+          <div class="bg-slate-800/90 border border-slate-700/80 hover:border-emerald-500/50 rounded-2xl p-5 shadow-lg flex flex-col justify-between transition-all">
+            <div>
+              <div class="flex items-start justify-between gap-3 mb-2">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+                </div>
+                <span class="px-2 py-0.5 text-[11px] font-bold rounded bg-emerald-500/10 text-emerald-300 border border-emerald-400/20">Live Status</span>
+              </div>
+              <h3 class="text-base font-bold text-white mb-1">Train Status Management</h3>
+              <p class="text-slate-400 text-xs leading-relaxed mb-3">Update the live operational state (Ready, Boarding, In Transit, Arrived, Delayed, Maintenance) and broadcast updates across stations.</p>
+              <div class="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1 mb-4">
+                <div class="flex justify-between"><span>Current State:</span> <strong id="tmMetricStatus" class="text-emerald-400">Operational</strong></div>
+                <div class="flex justify-between"><span>Route Info:</span> <strong id="tmMetricRoute" class="text-white">Dhaka &rarr; Chattogram</strong></div>
+                <div class="flex justify-between"><span>Last Sync:</span> <strong id="tmLastStatusUpdate" class="text-cyan-300">Today, 07:05 AM</strong></div>
+              </div>
+            </div>
+            <button type="button" onclick="document.getElementById('tmStatusModalOverlay').classList.add('active')" class="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl text-center transition-all shadow">
+              Update Train Status &rarr;
+            </button>
+          </div>
+
+          <!-- 3. Train Delay & Time Adjustment -->
+          <div class="bg-slate-800/90 border border-slate-700/80 hover:border-amber-500/50 rounded-2xl p-5 shadow-lg flex flex-col justify-between transition-all">
+            <div>
+              <div class="flex items-start justify-between gap-3 mb-2">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/30 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+                </div>
+                <span class="px-2 py-0.5 text-[11px] font-bold rounded bg-amber-500/10 text-amber-300 border border-amber-400/20">Delay Control</span>
+              </div>
+              <h3 class="text-base font-bold text-white mb-1">Update Train Delay</h3>
+              <p class="text-slate-400 text-xs leading-relaxed mb-3">Log train delay minutes, categorize operational causes (signal congestion, fog, maintenance), and publish live passenger notifications.</p>
+              <div class="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1 mb-4">
+                <div class="flex justify-between"><span>Active Delay:</span> <strong id="tmDelayBadge" class="text-amber-300 font-mono">0 Min Delay</strong></div>
+                <div class="flex justify-between"><span>Revised Departure:</span> <strong id="tmEstDeptTime" class="text-white font-mono">07:00 AM</strong></div>
+                <div class="flex justify-between"><span>Next Stoppage:</span> <strong id="tmCardNextStation" class="text-purple-300">Bhairab Bazar</strong></div>
+              </div>
+            </div>
+            <button type="button" onclick="document.getElementById('tmDelayModalOverlay').classList.add('active')" class="w-full py-2 px-3 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl text-center transition-all shadow">
+              Adjust Delay &amp; Timings &rarr;
+            </button>
+          </div>
+
+          <!-- 4. Coach Management -->
+          <div class="bg-slate-800/90 border border-slate-700/80 hover:border-indigo-500/50 rounded-2xl p-5 shadow-lg flex flex-col justify-between transition-all">
+            <div>
+              <div class="flex items-start justify-between gap-3 mb-2">
+                <div class="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-indigo-400" fill="currentColor" viewBox="0 0 24 24"><path d="M4 16c0 .88.39 1.67 1 2.22V20a1 1 0 001 1h1a1 1 0 001-1v-1h8v1a1 1 0 001 1h1a1 1 0 001-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM19 11H5V6h14v5z"/></svg>
+                </div>
+                <span class="px-2 py-0.5 text-[11px] font-bold rounded bg-indigo-500/10 text-indigo-300 border border-indigo-400/20">Rolling Stock</span>
+              </div>
+              <h3 class="text-base font-bold text-white mb-1">Coaches Management</h3>
+              <p class="text-slate-400 text-xs leading-relaxed mb-3">Inspect rake composition, attached coach categories (AC Berth, Snigdha, Shovon), electrical power, and hygiene audit status.</p>
+              <div class="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1 mb-4">
+                <div class="flex justify-between"><span>Assigned Coaches:</span> <strong class="text-indigo-300">14 Coaches (KA, KHA, GA, GHA, UMA)</strong></div>
+                <div class="flex justify-between"><span>Coach Classes:</span> <strong class="text-white">AC Berth, Snigdha, Shovon</strong></div>
+                <div class="flex justify-between"><span>AC &amp; Power:</span> <strong class="text-emerald-400">Optimal (230V / Inspected)</strong></div>
+              </div>
+            </div>
+            <a href="manage-coaches.html" class="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl text-center transition-all shadow">Open Coaches Management &rarr;</a>
+          </div>
+
+          <!-- 5. Train Fleet & Specifications -->
+          <div class="bg-slate-800/90 border border-slate-700/80 hover:border-blue-500/50 rounded-2xl p-5 shadow-lg flex flex-col justify-between transition-all">
+            <div>
+              <div class="flex items-start justify-between gap-3 mb-2">
+                <div class="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-5H6V8h12v4z"/></svg>
+                </div>
+                <span class="px-2 py-0.5 text-[11px] font-bold rounded bg-blue-500/10 text-blue-300 border border-blue-400/20">Fleet Specs</span>
+              </div>
+              <h3 class="text-base font-bold text-white mb-1">Train Fleet Details</h3>
+              <p class="text-slate-400 text-xs leading-relaxed mb-3">Audit all intercity and mail trains, engine types, standard base fares, total travel duration, and route corridors.</p>
+              <div class="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1 mb-4">
+                <div class="flex justify-between"><span>Travel Duration:</span> <strong id="tmTrainDuration" class="text-white">5h 15m</strong></div>
+                <div class="flex justify-between"><span>Off Day:</span> <strong id="tmTrainOffDay" class="text-white">Saturday</strong></div>
+                <div class="flex justify-between"><span>Base Ticket Fare:</span> <strong id="tmTrainFare" class="text-emerald-300 font-mono">&#2547;650</strong></div>
+              </div>
+            </div>
+            <a href="manage-trains.html" class="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl text-center transition-all shadow">Open Train Fleet Details &rarr;</a>
+          </div>
+
+          <!-- 6. Emergency & Incident Reporting -->
+          <div class="bg-slate-800/90 border border-slate-700/80 hover:border-rose-500/50 rounded-2xl p-5 shadow-lg flex flex-col justify-between transition-all">
+            <div>
+              <div class="flex items-start justify-between gap-3 mb-2">
+                <div class="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-400/30 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-rose-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                </div>
+                <span class="px-2 py-0.5 text-[11px] font-bold rounded bg-rose-500/10 text-rose-300 border border-rose-400/20">HQ Dispatch</span>
+              </div>
+              <h3 class="text-base font-bold text-white mb-1">Report Emergency / Incident</h3>
+              <p class="text-slate-400 text-xs leading-relaxed mb-3">Broadcast instant critical alerts (medical emergency, track obstruction, mechanical breakdown, police support) directly to central control.</p>
+              <div class="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1 mb-4">
+                <div class="flex justify-between"><span>Control Hotline:</span> <strong class="text-rose-400 font-mono">16318 / GRP Central</strong></div>
+                <div class="flex justify-between"><span>Emergency Channel:</span> <strong class="text-emerald-400">Active &amp; Ready</strong></div>
+                <div class="flex justify-between"><span>Priority Status:</span> <strong class="text-white">Direct HQ Intercom</strong></div>
+              </div>
+            </div>
+            <button type="button" onclick="document.getElementById('tmEmergencyModalOverlay').classList.add('active')" class="w-full py-2 px-3 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl text-center transition-all shadow">
+              Dispatch Emergency Alert &rarr;
+            </button>
+          </div>
+
+          <!-- 7. Platform Operations -->
+          <div class="bg-slate-800/90 border border-slate-700/80 hover:border-teal-500/50 rounded-2xl p-5 shadow-lg flex flex-col justify-between transition-all">
+            <div>
+              <div class="flex items-start justify-between gap-3 mb-2">
+                <div class="w-10 h-10 rounded-xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-teal-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z" clip-rule="evenodd"/></svg>
+                </div>
+                <span class="px-2 py-0.5 text-[11px] font-bold rounded bg-teal-500/10 text-teal-300 border border-teal-400/20">Station Track</span>
+              </div>
+              <h3 class="text-base font-bold text-white mb-1">Platform Operations</h3>
+              <p class="text-slate-400 text-xs leading-relaxed mb-3">Coordinate with station masters for platform allocation, loop track holding, and train clearance at major terminals.</p>
+              <div class="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1 mb-4">
+                <div class="flex justify-between"><span>Origin Station:</span> <strong id="tmCardSourceStation" class="text-white">Dhaka (Kamalapur)</strong></div>
+                <div class="flex justify-between"><span>Destination:</span> <strong id="tmCardDestStation" class="text-white">Chattogram Junction</strong></div>
+                <div class="flex justify-between"><span>Dept / Arr:</span> <strong class="text-sky-300"><span id="tmCardDeptTime">07:00 AM</span> &ndash; <span id="tmCardArrTime">12:15 PM</span></strong></div>
+              </div>
+            </div>
+            <a href="manage-platforms.html" class="w-full py-2 px-3 bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs rounded-xl text-center transition-all shadow">Open Platform Operations &rarr;</a>
+          </div>
+
+          <!-- 8. Manager Profile -->
+          <div class="bg-slate-800/90 border border-slate-700/80 hover:border-slate-500/50 rounded-2xl p-5 shadow-lg flex flex-col justify-between transition-all">
+            <div>
+              <div class="flex items-start justify-between gap-3 mb-2">
+                <div class="w-10 h-10 rounded-xl bg-slate-700 border border-slate-600 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-slate-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
+                </div>
+                <span class="px-2 py-0.5 text-[11px] font-bold rounded bg-slate-700/50 text-slate-300 border border-slate-600">Staff Account</span>
+              </div>
+              <h3 class="text-base font-bold text-white mb-1">My Profile &amp; Assignment</h3>
+              <p class="text-slate-400 text-xs leading-relaxed mb-3">View personal information, railway staff ID, assigned base station, emergency phone contact, and security credentials.</p>
+              <div class="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1 mb-4">
+                <div class="flex justify-between"><span>Staff Role:</span> <strong class="text-white">Train Manager</strong></div>
+                <div class="flex justify-between"><span>Base Division:</span> <strong class="text-cyan-300">Dhaka Railway Division</strong></div>
+                <div class="flex justify-between"><span>Account Status:</span> <strong class="text-emerald-400">Active &amp; Verified</strong></div>
+              </div>
+            </div>
+            <a href="profile.html" class="w-full py-2 px-3 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-xl text-center transition-all shadow">Open Profile Page &rarr;</a>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Incident & Emergency Dispatch History -->
+      <div id="tm-emergency-history-section" class="card bg-slate-800/90 border border-slate-700/80 rounded-2xl p-6 shadow-xl mb-6">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-slate-700 mb-4">
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <svg class="w-4 h-4 text-rose-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+              Incident &amp; Emergency Dispatch History
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">Live emergency incident alerts dispatched by train management to Central Control HQ &amp; Admin</p>
+          </div>
+          <button onclick="document.getElementById('tmEmergencyModalOverlay').classList.add('active')" class="py-2 px-4 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer">
+            Dispatch Emergency Alert
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="table w-full text-left text-xs">
+            <thead>
+              <tr class="text-slate-400 border-b border-slate-700">
+                <th class="py-2.5">Incident ID</th><th>Train</th><th>Emergency Nature</th><th>Severity</th><th>Location / Landmark</th><th>Reported At</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="tmEmergenciesTableBody"><!-- Injected by dashboard.js --></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Hidden backward-compat hooks -->
+      <div class="hidden" aria-hidden="true">
+        <div id="tmJourneyRouteFlow"></div><div id="tmCoachTabs"></div><div id="tmSelectedCoachInfo"></div>
+        <div id="tmSeatMapGrid"></div><div id="tmOccPercentText"></div><div id="tmOccProgressBar"></div>
+        <div id="tmOccBookedCount"></div><div id="tmOccAvailCount"></div><div id="tmOccTotalCount"></div>
+        <div id="tmMetricOccupancy"></div><div id="tmMetricSeatsCount"></div><div id="tmMetricDelay"></div>
+        <div id="tmMetricEstDept"></div><span id="tmCardPassengers"></span><span id="tmCardAssignedTrain"></span>
+        <span id="tmCardTrainId"></span><span id="tmCardSeats"></span><span id="tmCardOccSeats"></span><span id="tmCardAvailSeats"></span>
+      </div>
+    </main>
+  </div>
+
+  <!-- 1. Schedule Request Modal -->
+  <div class="modal-overlay" id="tmScheduleModalOverlay">
+    <div class="modal-container max-w-lg bg-slate-800 text-white border border-slate-700 rounded-2xl p-6 shadow-2xl">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-700 mb-4">
+        <h3 class="text-base font-bold text-white">Request Train Schedule Update</h3>
+        <button type="button" onclick="document.getElementById('tmScheduleModalOverlay').classList.remove('active')" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer">&times;</button>
+      </div>
+      <form id="tmScheduleUpdateModalForm" class="space-y-3.5 text-xs">
+        <div><label class="block text-slate-300 font-bold mb-1">Train</label><input type="text" id="tmSchedTrainName" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-bold" readonly></div>
+        <div>
+          <label class="block text-slate-300 font-bold mb-1">Current Schedule Information</label>
+          <div id="tmSchedCurrentSummary" class="p-2.5 bg-slate-900/90 rounded-xl border border-slate-700 font-mono text-[11px] text-cyan-300 space-y-1">
+            <div class="flex justify-between"><span>Timings:</span> <strong id="tmSchedDispTimes" class="text-white">07:00 AM &rarr; 12:15 PM</strong></div>
+            <div class="flex justify-between"><span>Route:</span> <strong id="tmSchedDispRoute" class="text-white">Dhaka &rarr; Chattogram</strong></div>
+            <div class="flex justify-between"><span>Platform:</span> <strong id="tmSchedDispPlatform" class="text-amber-300">Platform #1</strong></div>
+          </div>
+        </div>
+        <div><label class="block text-slate-300 font-bold mb-1">Requested Change</label><textarea id="tmSchedRequestedChange" rows="2" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:outline-none" placeholder="e.g. Request revised departure at 07:30 AM and Platform #2 assignment" required></textarea></div>
+        <div><label class="block text-slate-300 font-bold mb-1">Reason for Request</label><textarea id="tmSchedReason" rows="2" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:outline-none" placeholder="State operational reason" required></textarea></div>
+        <div class="flex items-center justify-between p-2.5 bg-slate-900/60 rounded-xl border border-slate-800">
+          <span class="text-slate-400 font-semibold">Request Status:</span>
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Pending Review</span>
+        </div>
+        <div class="mt-4 pt-3 border-t border-slate-700 flex justify-end gap-2">
+          <button type="button" onclick="document.getElementById('tmScheduleModalOverlay').classList.remove('active')" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-xl transition-all cursor-pointer">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-lg">Submit Schedule Request</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. Train Status Update Modal -->
+  <div class="modal-overlay" id="tmStatusModalOverlay">
+    <div class="modal-container max-w-md bg-slate-800 text-white border border-slate-700 rounded-2xl p-6 shadow-2xl">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-700 mb-4">
+        <h3 class="text-base font-bold text-white">Update Live Train Status</h3>
+        <button type="button" onclick="document.getElementById('tmStatusModalOverlay').classList.remove('active')" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer">&times;</button>
+      </div>
+      <form id="tmStatusUpdateForm" class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-300 font-bold mb-1">Operational State</label>
+          <select id="tmStatusSelect" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-bold focus:ring-2 focus:ring-cyan-500 focus:outline-none">
+            <option value="Operational">Operational (Normal Service)</option>
+            <option value="Ready for Boarding">Ready for Boarding</option>
+            <option value="Boarding in Progress">Boarding in Progress</option>
+            <option value="In Transit">In Transit (En Route)</option>
+            <option value="Arrived at Station">Arrived at Station</option>
+            <option value="Delayed">Delayed / Holding</option>
+            <option value="Under Maintenance">Under Maintenance</option>
+            <option value="Cancelled">Service Cancelled</option>
+          </select>
+        </div>
+        <div><label class="block text-slate-300 font-bold mb-1">Status Note / Reason</label><input type="text" id="tmStatusNote" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="e.g. Cleared for Platform 1 boarding"></div>
+        <div class="mt-4 pt-3 border-t border-slate-700 flex justify-end gap-2">
+          <button type="button" onclick="document.getElementById('tmStatusModalOverlay').classList.remove('active')" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-xl transition-all cursor-pointer">Cancel</button>
+          <button type="submit" onclick="setTimeout(() => document.getElementById('tmStatusModalOverlay').classList.remove('active'), 200)" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer">Publish Status Update</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. Train Delay Update Modal -->
+  <div class="modal-overlay" id="tmDelayModalOverlay">
+    <div class="modal-container max-w-md bg-slate-800 text-white border border-slate-700 rounded-2xl p-6 shadow-2xl">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-700 mb-4">
+        <h3 class="text-base font-bold text-white">Update Train Delay &amp; Timings</h3>
+        <button type="button" onclick="document.getElementById('tmDelayModalOverlay').classList.remove('active')" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer">&times;</button>
+      </div>
+      <form id="tmDelayForm" class="space-y-4 text-xs">
+        <div><label class="block text-slate-300 font-bold mb-1">Delay Duration (Minutes)</label><input type="number" id="tmDelayMinutes" min="0" max="360" value="0" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none" required></div>
+        <div>
+          <label class="block text-slate-300 font-bold mb-1">Delay Reason</label>
+          <select id="tmDelayReason" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
+            <option value="On Time / No Delay">None / On Schedule</option>
+            <option value="Signal Congestion">Signal Congestion</option>
+            <option value="Track Maintenance Work">Track Maintenance Work</option>
+            <option value="Dense Fog / Severe Weather">Dense Fog / Severe Weather</option>
+            <option value="Locomotive Technical Inspection">Locomotive Technical Inspection</option>
+            <option value="Single Line Crossing Waiting">Single Line Crossing Waiting</option>
+            <option value="Passenger Boarding Rush">Passenger Boarding Rush</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-400 font-bold mb-1">Quick Presets:</label>
+          <div class="flex flex-wrap gap-1.5">
+            <button type="button" onclick="setDelayPreset(0)" class="py-1 px-2 bg-slate-900 hover:bg-slate-700 border border-slate-700 rounded text-emerald-400 font-bold">On Time</button>
+            <button type="button" onclick="setDelayPreset(10)" class="py-1 px-2 bg-slate-900 hover:bg-slate-700 border border-slate-700 rounded text-amber-400 font-bold">+10m</button>
+            <button type="button" onclick="setDelayPreset(20)" class="py-1 px-2 bg-slate-900 hover:bg-slate-700 border border-slate-700 rounded text-amber-400 font-bold">+20m</button>
+            <button type="button" onclick="setDelayPreset(30)" class="py-1 px-2 bg-slate-900 hover:bg-slate-700 border border-slate-700 rounded text-amber-400 font-bold">+30m</button>
+            <button type="button" onclick="setDelayPreset(45)" class="py-1 px-2 bg-slate-900 hover:bg-slate-700 border border-slate-700 rounded text-amber-400 font-bold">+45m</button>
+            <button type="button" onclick="setDelayPreset(60)" class="py-1 px-2 bg-slate-900 hover:bg-slate-700 border border-slate-700 rounded text-amber-400 font-bold">+60m</button>
+          </div>
+        </div>
+        <div class="mt-4 pt-3 border-t border-slate-700 flex justify-end gap-2">
+          <button type="button" onclick="document.getElementById('tmDelayModalOverlay').classList.remove('active')" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-xl transition-all cursor-pointer">Cancel</button>
+          <button type="submit" onclick="setTimeout(() => document.getElementById('tmDelayModalOverlay').classList.remove('active'), 200)" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer">Broadcast Delay</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. Emergency Alert Modal -->
+  <div class="modal-overlay" id="tmEmergencyModalOverlay">
+    <div class="modal-container max-w-lg bg-slate-800 text-white border border-slate-700 rounded-2xl p-6 shadow-2xl">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-700 mb-4">
+        <h3 class="text-base font-bold text-white">Dispatch Emergency / Incident Alert</h3>
+        <button type="button" onclick="document.getElementById('tmEmergencyModalOverlay').classList.remove('active')" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer">&times;</button>
+      </div>
+      <form id="tmEmergencyForm" class="space-y-3 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-300 font-bold mb-1">Emergency Nature</label>
+            <select id="tmEmergType" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-bold focus:ring-2 focus:ring-rose-500 focus:outline-none" required>
+              <option value="Medical Emergency on Board">Medical Emergency on Board</option>
+              <option value="Track Obstruction / Danger Ahead">Track Obstruction / Danger</option>
+              <option value="Locomotive Mechanical Failure">Engine Breakdown</option>
+              <option value="Railway Police / Security Alert">Police / Security Alert</option>
+              <option value="Fire / Smoke Alarm">Smoke / Electrical Hazard</option>
+              <option value="Extreme Weather Halt">Storm / Extreme Weather</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-300 font-bold mb-1">Alert Severity</label>
+            <select id="tmEmergSeverity" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-bold focus:ring-2 focus:ring-rose-500 focus:outline-none">
+              <option value="High Priority - Immediate Control Action">High Priority (Immediate)</option>
+              <option value="Critical - Emergency Halt Required">Critical (Emergency Halt)</option>
+              <option value="Moderate - Assistance at Next Station">Moderate (Next Station)</option>
+            </select>
+          </div>
+        </div>
+        <div><label class="block text-slate-300 font-bold mb-1">Current KM Post / Nearest Landmark</label><input type="text" id="tmEmergLocation" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-rose-500 focus:outline-none" placeholder="e.g. KM 42 near Tongi Junction" required></div>
+        <div><label class="block text-slate-300 font-bold mb-1">Emergency Description &amp; Immediate Measures</label><textarea id="tmEmergDesc" rows="3" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-rose-500 focus:outline-none" placeholder="State exact coach number, passenger situation, or track blockage..." required></textarea></div>
+        <div class="mt-4 pt-3 border-t border-slate-700 flex justify-end gap-2">
+          <button type="button" onclick="document.getElementById('tmEmergencyModalOverlay').classList.remove('active')" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-xl transition-all cursor-pointer">Cancel</button>
+          <button type="submit" onclick="setTimeout(() => document.getElementById('tmEmergencyModalOverlay').classList.remove('active'), 200)" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer">Dispatch Alert Now</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/main.js"></script>
+  <script src="js/dashboard.js"></script>    <script src="js/dashboard_db.js"></script>
+  <script>
+    function setDelayPreset(minutes) {
+      const input = document.getElementById('tmDelayMinutes');
+      if (input) { input.value = minutes; input.dispatchEvent(new Event('input')); }
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        const map = {
+          tmQuickDelayBadge: 'tmDelayBadge',
+          tmQuickEstDept: 'tmEstDeptTime',
+          tmQuickStatus: 'tmMetricStatus',
+          tmQuickLastSync: 'tmLastStatusUpdate'
+        };
+        Object.entries(map).forEach(([qId, srcId]) => {
+          const src = document.getElementById(srcId);
+          const q   = document.getElementById(qId);
+          if (src && q) { q.textContent = src.textContent; q.className = src.className; }
+        });
+      }, 600);
+    });
+  </script>
+</body>
+</html>
+
+

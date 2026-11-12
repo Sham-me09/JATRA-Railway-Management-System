@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JATRA: Railway Management System - Portal Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              950: '#050a15',
+              900: '#0a1224',
+              800: '#14223d',
+              700: '#1e3256'
+            },
+            sky: {
+              bright: '#38bdf8',
+              light: '#e0f2fe',
+              subtle: '#f0f9ff'
+            },
+            accent: {
+              blue: '#0284c7',
+              hover: '#0369a1'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/auth.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body class="bg-[#050a15] text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-sky-500 selection:text-white">
+
+  <!-- Top Executive Navbar (Matching Picture) -->
+  <nav class="navbar bg-[#050a15] border-b border-slate-800/80 sticky top-0 z-50">
+    <div class="container-fluid px-4 sm:px-8 navbar-container flex items-center justify-between">
+      <!-- Left: Logo & Brand Name -->
+      <a href="index.html" class="brand-logo flex items-center gap-3 text-white font-extrabold text-base sm:text-lg tracking-wide" id="brandLogoLink">
+        <div class="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-400/30 flex items-center justify-center text-sky-400 shadow-inner">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.71 0 5.82.42 6 2H6c.18-1.58 2.29-2 6-2zm-4.5 13c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-5H6V8h12v4z"/></svg>
+        </div>
+        <span class="tracking-wide text-white uppercase font-bold text-sm sm:text-base">JATRA: RAILWAY MANAGEMENT SYSTEM</span>
+      </a>
+
+      <!-- Right: User status pills & actions (Matching Picture) -->
+      <div class="nav-actions flex items-center gap-2 sm:gap-3" id="navActions">
+        <span class="text-slate-300 text-xs sm:text-sm font-medium">Hi, Rahim</span>
+        <span class="px-2.5 py-0.5 text-xs font-semibold rounded-md bg-[#0a233f] text-[#38bdf8] border border-[#0d4470]">Passenger</span>
+        <a href="user-dashboard.html" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-[#0a1224] border border-slate-700 text-white hover:bg-slate-800 transition-colors">My Portal</a>
+        <button onclick="logoutUser()" class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[#e11d48] text-white hover:bg-[#be123c] transition-colors cursor-pointer">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Viewport Content Split Layout -->
+  <main class="auth-split-wrapper flex-1 flex flex-col lg:flex-row w-full relative">
+
+    <!-- LEFT SIDE: Welcome Branding, Interactive Corridor Map, Locomotive Visual & 3 Stat Cards -->
+    <section class="w-full lg:w-[54%] xl:w-[55%] relative p-6 sm:p-8 lg:p-10 flex flex-col justify-between overflow-hidden border-b lg:border-b-0 lg:border-r border-slate-800/80 bg-[#050a15]">
+      
+      <!-- Ambient Glow Behind Heading & Map -->
+      <div class="absolute -top-16 -left-16 w-80 h-80 bg-sky-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute top-10 right-10 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
+
+      <!-- Top Section: Welcome Text (Left) & Bangladesh Corridor Network Map (Right) -->
+      <div class="relative z-10 grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+        
+        <!-- Left: Welcome Typography -->
+        <div class="md:col-span-6 lg:col-span-7">
+          <span class="inline-block text-[#38bdf8] font-medium text-base sm:text-lg tracking-normal mb-0.5">
+            Welcome to
+          </span>
+          <h1 class="text-5xl sm:text-6xl font-black text-white tracking-tight leading-none my-1">
+            JATRA
+          </h1>
+          <div class="text-lg sm:text-xl font-medium text-slate-100 mt-1">
+            Smart Railway Management System
+          </div>
+          <!-- Glowing Cyan Accent Bar -->
+          <div class="w-14 h-1 bg-[#38bdf8] rounded-full shadow-[0_0_10px_#38bdf8] my-3.5"></div>
+          <p class="text-slate-400 text-xs sm:text-sm max-w-sm leading-relaxed">
+            Digitally managing Bangladesh Railway for a smarter, faster and safer journey.
+          </p>
+        </div>
+
+        <!-- Right: Bangladesh Railway Corridor SVG Map (Matching Screenshot Route & Nodes) -->
+        <div class="md:col-span-6 lg:col-span-5 relative flex justify-center md:justify-end">
+          <div class="relative w-full max-w-[280px] h-[260px]">
+            <!-- Dotted Background Map Texture -->
+            <svg class="absolute inset-0 w-full h-full opacity-25 pointer-events-none" viewBox="0 0 280 260" fill="none">
+              <pattern id="dotPattern" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
+                <circle cx="2" cy="2" r="1" fill="#38bdf8" />
+              </pattern>
+              <!-- Bangladesh Map Dot Matrix Silhouette -->
+              <path d="M 60,20 Q 90,10 130,25 Q 160,40 180,70 Q 200,110 220,160 Q 230,200 200,240 Q 150,250 110,230 Q 70,210 50,160 Q 40,110 50,60 Z" fill="url(#dotPattern)" opacity="0.6"/>
+            </svg>
+
+            <!-- SVG Route Line with Station Nodes (Panchagarh to Cox's Bazar) -->
+            <svg class="w-full h-full relative z-10" viewBox="0 0 280 260" fill="none">
+              <defs>
+                <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+
+              <!-- Main Trunk Railway Route Curve -->
+              <path 
+                d="M 65,22 L 95,45 L 115,70 L 140,110 L 160,135 L 180,175 L 205,230" 
+                stroke="#00a8ff" 
+                stroke-width="2.5" 
+                stroke-linecap="round"
+                filter="url(#glow)"
+              />
+
+              <!-- Branch to Rajshahi & Ishwardi -->
+              <path 
+                d="M 115,70 L 75,90 L 120,102 L 140,110" 
+                stroke="#00a8ff" 
+                stroke-width="2" 
+                stroke-dasharray="3,3"
+                stroke-linecap="round"
+              />
+
+              <!-- Station 1: Panchagarh -->
+              <g class="cursor-pointer group">
+                <circle cx="65" cy="22" r="4.5" fill="#00a8ff" filter="url(#glow)"/>
+                <circle cx="65" cy="22" r="2" fill="#ffffff"/>
+                <text x="74" y="24" fill="#e2e8f0" font-size="9" font-weight="600">Panchagarh</text>
+              </g>
+
+              <!-- Station 2: Dinajpur -->
+              <g class="cursor-pointer group">
+                <circle cx="95" cy="45" r="3.5" fill="#00a8ff"/>
+                <circle cx="95" cy="45" r="1.5" fill="#ffffff"/>
+                <text x="104" y="47" fill="#cbd5e1" font-size="8.5" font-weight="500">Dinajpur</text>
+              </g>
+
+              <!-- Station 3: Bogra -->
+              <g class="cursor-pointer group">
+                <circle cx="115" cy="70" r="3.5" fill="#00a8ff"/>
+                <circle cx="115" cy="70" r="1.5" fill="#ffffff"/>
+                <text x="124" y="72" fill="#cbd5e1" font-size="8.5" font-weight="500">Bogra</text>
+              </g>
+
+              <!-- Station 4: Rajshahi (Branch left) -->
+              <g class="cursor-pointer group">
+                <circle cx="75" cy="90" r="3.5" fill="#00a8ff"/>
+                <circle cx="75" cy="90" r="1.5" fill="#ffffff"/>
+                <text x="40" y="93" fill="#cbd5e1" font-size="8.5" font-weight="500">Rajshahi</text>
+              </g>
+
+              <!-- Station 5: Ishwardi -->
+              <g class="cursor-pointer group">
+                <circle cx="120" cy="102" r="3.5" fill="#00a8ff"/>
+                <circle cx="120" cy="102" r="1.5" fill="#ffffff"/>
+                <text x="128" y="104" fill="#cbd5e1" font-size="8.5" font-weight="500">Ishwardi</text>
+              </g>
+
+              <!-- Station 6: Dhaka (Central Major Hub - Large Glowing Pulse) -->
+              <g class="cursor-pointer group">
+                <circle cx="140" cy="110" r="8" fill="#38bdf8" opacity="0.3" class="animate-ping"/>
+                <circle cx="140" cy="110" r="6" fill="#00a8ff" filter="url(#glow)"/>
+                <circle cx="140" cy="110" r="3" fill="#ffffff"/>
+                <text x="154" y="113" fill="#ffffff" font-size="11" font-weight="bold">Dhaka</text>
+              </g>
+
+              <!-- Station 7: Cumilla -->
+              <g class="cursor-pointer group">
+                <circle cx="160" cy="135" r="3.5" fill="#00a8ff"/>
+                <circle cx="160" cy="135" r="1.5" fill="#ffffff"/>
+                <text x="169" y="137" fill="#cbd5e1" font-size="8.5" font-weight="500">Cumilla</text>
+              </g>
+
+              <!-- Station 8: Chattogram -->
+              <g class="cursor-pointer group">
+                <circle cx="180" cy="175" r="4" fill="#00a8ff" filter="url(#glow)"/>
+                <circle cx="180" cy="175" r="2" fill="#ffffff"/>
+                <text x="189" y="177" fill="#e2e8f0" font-size="9" font-weight="600">Chattogram</text>
+              </g>
+
+              <!-- Station 9: Cox's Bazar -->
+              <g class="cursor-pointer group">
+                <circle cx="205" cy="230" r="4.5" fill="#00a8ff" filter="url(#glow)"/>
+                <circle cx="205" cy="230" r="2" fill="#ffffff"/>
+                <text x="155" y="233" fill="#e2e8f0" font-size="9" font-weight="600">Cox's Bazar</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Middle Section: Bangladesh Railway Locomotive Image with Glowing Headlight & Station Sign -->
+      <div class="relative z-10 my-4 sm:my-5 rounded-2xl overflow-hidden shadow-2xl border border-slate-800/80 group">
+        <div class="relative w-full h-44 sm:h-52 lg:h-60 overflow-hidden bg-slate-950">
+          <img 
+            src="images/jatra_train_bg.jpg" 
+            alt="Bangladesh Railway Locomotive" 
+            class="w-full h-full object-cover object-center filter brightness-95"
+            onerror="this.src='https://images.unsplash.com/photo-1541427468627-a89a96e5ca1d?auto=format&fit=crop&w=1200&q=80'"
+          />
+          <!-- Station Platform Signage Overlay -->
+          <div class="absolute top-4 left-4 px-3 py-1.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-[11px] font-bold text-emerald-300 backdrop-blur-md flex items-center gap-2 shadow-lg">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>বাংলাদেশ রেলওয়ে</span>
+          </div>
+          <!-- Locomotive Headlight Light Beams Overlay -->
+          <div class="absolute bottom-6 left-1/3 w-36 h-14 bg-sky-300/20 rounded-full blur-xl headlight-pulse pointer-events-none"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-[#050a15] via-transparent to-transparent opacity-80"></div>
+        </div>
+      </div>
+
+      <!-- Bottom Row: 3 Floating Neon-Bordered Glass Stat Cards -->
+      <div class="relative z-10 grid grid-cols-3 gap-2.5 sm:gap-4 mt-1">
+        
+        <!-- Stat Card 1: 120+ Trains -->
+        <div class="stat-glass-card rounded-2xl p-3 sm:p-3.5 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-sky-500/15 border border-sky-400/40 flex items-center justify-center text-sky-400 text-lg shrink-0 shadow-inner">
+            🚄
+          </div>
+          <div>
+            <div class="text-lg sm:text-2xl font-bold text-white leading-none">120+</div>
+            <div class="text-[11px] sm:text-xs font-medium text-slate-400 mt-0.5">Trains</div>
+          </div>
+        </div>
+
+        <!-- Stat Card 2: 50+ Stations -->
+        <div class="stat-glass-card rounded-2xl p-3 sm:p-3.5 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-sky-500/15 border border-sky-400/40 flex items-center justify-center text-sky-400 text-lg shrink-0 shadow-inner">
+            🛠️
+          </div>
+          <div>
+            <div class="text-lg sm:text-2xl font-bold text-white leading-none">50+</div>
+            <div class="text-[11px] sm:text-xs font-medium text-slate-400 mt-0.5">Stations</div>
+          </div>
+        </div>
+
+        <!-- Stat Card 3: Easy Ticketing -->
+        <div class="stat-glass-card rounded-2xl p-3 sm:p-3.5 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-sky-500/15 border border-sky-400/40 flex items-center justify-center text-sky-400 text-lg shrink-0 shadow-inner">
+            🎯
+          </div>
+          <div>
+            <div class="text-lg sm:text-2xl font-bold text-white leading-none">Easy</div>
+            <div class="text-[11px] sm:text-xs font-medium text-slate-400 mt-0.5">Ticketing</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Blueprint Train Wireframe Line at very bottom -->
+      <div class="w-full mt-3 opacity-20 pointer-events-none flex justify-between items-center text-[10px] text-sky-400 font-mono">
+        <span>—————— [ 🚄 BR-INTERCITY TRUNK CORRIDOR ] ——————</span>
+        <span>DHAKA - CHATTOGRAM - COX'S BAZAR</span>
+      </div>
+
+    </section>
+
+    <!-- RIGHT SIDE: Portal Login Card (Matching Screenshot Form Exactly) -->
+    <section class="w-full lg:w-[46%] xl:w-[45%] bg-[#050a15] p-4 sm:p-8 lg:p-10 flex items-center justify-center relative">
+      
+      <!-- Subtle Radial Glow Behind Form -->
+      <div class="absolute top-1/3 right-1/3 w-80 h-80 bg-sky-600/10 rounded-full blur-3xl pointer-events-none"></div>
+
+      <!-- Main Login Container Card -->
+      <div class="w-full max-w-[500px] bg-[#0a1224]/95 border border-slate-800/90 rounded-3xl p-6 sm:p-8 lg:p-9 shadow-2xl backdrop-blur-xl relative z-10">
+        
+        <!-- Header: Centered Squircle Badge & Titles -->
+        <div class="text-center mb-6">
+          <div class="w-14 h-14 mx-auto mb-3.5 bg-gradient-to-b from-[#14294a] to-[#0a172e] border border-sky-500/30 text-sky-300 rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-sky-950/50">
+            🚄
+          </div>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Portal Login</h2>
+          <p class="text-slate-400 text-xs sm:text-sm mt-1">Select your role to sign in to Bangladesh Railway System</p>
+        </div>
+
+        <!-- Role Selector Label & 5 Horizontal Role Buttons -->
+        <div class="mb-5">
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">
+            SELECT PORTAL ROLE
+          </label>
+          
+          <div class="grid grid-cols-5 gap-1.5 sm:gap-2" id="roleSelectorGroup">
+            
+            <!-- 1. Passenger (Active state by default in screenshot) -->
+            <button 
+              type="button" 
+              data-role="user" 
+              class="role-tab active py-2 sm:py-2.5 px-1 text-[11px] font-bold rounded-xl border border-transparent bg-[#0284c7] text-white shadow-[0_0_15px_rgba(2,132,199,0.4)] flex flex-col items-center justify-center gap-1 transition-all cursor-pointer"
+              title="Passenger Portal"
+            >
+              <span class="text-base sm:text-lg">👤</span>
+              <span class="leading-tight truncate w-full text-center">Passenger</span>
+            </button>
+
+            <!-- 2. Ticket Manager -->
+            <button 
+              type="button" 
+              data-role="ticket_manager" 
+              class="role-tab py-2 sm:py-2.5 px-1 text-[11px] font-bold rounded-xl border border-slate-800 bg-[#070e1c] text-slate-300 hover:border-slate-600 hover:text-white flex flex-col items-center justify-center gap-1 transition-all cursor-pointer"
+              title="Ticket Manager Portal"
+            >
+              <span class="text-base sm:text-lg">🎫</span>
+              <span class="leading-tight text-center text-[10px] sm:text-[11px]">Ticket<br>Manager</span>
+            </button>
+
+            <!-- 3. Station Master -->
+            <button 
+              type="button" 
+              data-role="station_master" 
+              class="role-tab py-2 sm:py-2.5 px-1 text-[11px] font-bold rounded-xl border border-slate-800 bg-[#070e1c] text-slate-300 hover:border-slate-600 hover:text-white flex flex-col items-center justify-center gap-1 transition-all cursor-pointer"
+              title="Station Master Portal"
+            >
+              <span class="text-base sm:text-lg">🛉</span>
+              <span class="leading-tight text-center text-[10px] sm:text-[11px]">Station<br>Master</span>
+            </button>
+
+            <!-- 4. Train Manager -->
+            <button 
+              type="button" 
+              data-role="train_manager" 
+              class="role-tab py-2 sm:py-2.5 px-1 text-[11px] font-bold rounded-xl border border-slate-800 bg-[#070e1c] text-slate-300 hover:border-slate-600 hover:text-white flex flex-col items-center justify-center gap-1 transition-all cursor-pointer"
+              title="Train Manager Portal"
+            >
+              <span class="text-base sm:text-lg">🚄</span>
+              <span class="leading-tight text-center text-[10px] sm:text-[11px]">Train<br>Manager</span>
+            </button>
+
+            <!-- 5. Admin -->
+            <button 
+              type="button" 
+              data-role="admin" 
+              class="role-tab py-2 sm:py-2.5 px-1 text-[11px] font-bold rounded-xl border border-slate-800 bg-[#070e1c] text-slate-300 hover:border-slate-600 hover:text-white flex flex-col items-center justify-center gap-1 transition-all cursor-pointer"
+              title="System Admin HQ"
+            >
+              <span class="text-base sm:text-lg">⚙️</span>
+              <span class="leading-tight truncate w-full text-center">Admin</span>
+            </button>
+
+          </div>
+          <input type="hidden" id="loginRole" value="user">
+        </div>
+
+        <!-- Login Form -->
+        <form id="loginForm" class="space-y-4">
+          
+          <!-- Email Field -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5" for="loginEmail">Email Address</label>
+            <div class="relative flex items-center">
+              <span class="absolute left-3.5 text-slate-400 pointer-events-none">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+              </span>
+              <input 
+                type="email" 
+                id="loginEmail" 
+                class="w-full pl-10 pr-4 py-3 bg-[#060c18] border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 text-sm transition-all shadow-inner" 
+                placeholder="user@railway.com" 
+                value="user@railway.com"
+                required
+              >
+            </div>
+          </div>
+
+          <!-- Password Field -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5" for="loginPassword">Password</label>
+            <div class="relative flex items-center">
+              <span class="absolute left-3.5 text-slate-400 pointer-events-none">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+              </span>
+              <input 
+                type="password" 
+                id="loginPassword" 
+                class="w-full pl-10 pr-10 py-3 bg-[#060c18] border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 text-sm transition-all shadow-inner font-mono" 
+                placeholder="••••••••" 
+                value="user123"
+                required
+              >
+              <button 
+                type="button" 
+                id="togglePasswordBtn" 
+                onclick="togglePasswordVisibility()" 
+                class="absolute right-3 text-slate-400 hover:text-sky-400 p-1 cursor-pointer transition-colors"
+                title="Toggle password visibility"
+              >
+                <svg id="eyeIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Remember Me & Forgot Password -->
+          <div class="flex items-center justify-between text-xs pt-0.5">
+            <label class="flex items-center gap-2 cursor-pointer select-none text-slate-300 hover:text-white">
+              <input type="checkbox" id="rememberMeCheck" checked class="w-4 h-4 rounded bg-[#060c18] border-slate-700 text-[#0284c7] focus:ring-sky-500 cursor-pointer custom-checkbox">
+              <span>Remember Me</span>
+            </label>
+            <a href="javascript:void(0)" onclick="handleForgotPassword()" class="text-[#38bdf8] hover:text-sky-300 font-semibold transition-colors">
+              Forgot Password?
+            </a>
+          </div>
+
+          <!-- Primary Sign In Button (Matching Blue Gradient & Arrow) -->
+          <div class="pt-2">
+            <button 
+              type="submit" 
+              id="loginSubmitBtn" 
+              class="w-full py-3.5 px-4 bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold rounded-xl shadow-[0_0_20px_rgba(2,132,199,0.35)] transition-all cursor-pointer text-sm sm:text-base flex items-center justify-center gap-2"
+            >
+              <span>Sign In to Portal</span>
+              <span class="text-base">→</span>
+            </button>
+          </div>
+
+        </form>
+
+        <!-- New Passenger Registration Callout Banner (Matching Picture) -->
+        <div class="mt-5 p-4 bg-[#060c18] border border-slate-800/90 rounded-2xl flex items-center justify-between gap-3 text-xs">
+          <div>
+            <div class="font-bold text-white text-sm">New to Bangladesh Railway?</div>
+            <div class="text-slate-400 text-xs mt-0.5">Create a free passenger account</div>
+          </div>
+          <a href="register.html" class="whitespace-nowrap px-4 py-2 bg-transparent hover:bg-[#0284c7]/20 text-[#38bdf8] border border-[#0284c7] font-semibold rounded-xl transition-all shadow text-xs flex items-center gap-1">
+            <span>Register Here</span>
+            <span>→</span>
+          </a>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <script src="js/main.js"></script>
+  <script src="js/auth.js"></script>
+</body>
+</html>
+
