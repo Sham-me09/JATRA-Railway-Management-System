@@ -188,7 +188,7 @@ To design and implement a practical database-driven application that demonstrate
 
 ## 👩‍💻 Author
 
-**Shamme**
+**Mhamuda Shafiq Shamme**
 
 Computer Science and Engineering  
 Military Institute of Science and Technology (MIST)
