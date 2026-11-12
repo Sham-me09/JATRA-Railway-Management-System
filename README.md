@@ -7,6 +7,7 @@ JATRA is a Railway Management System developed to manage railway operations thro
 This project was developed as an academic **Database Management Systems (DBMS) course project at the Military Institute of Science and Technology (MIST), Department of Computer Science and Engineering (CSE).**
 
 ---
+<img width="1892" height="862" alt="image" src="https://github.com/user-attachments/assets/2a30227e-7295-4c37-8210-344ed2fd6c1d" />
 
 ## 📌 Project Overview
 
